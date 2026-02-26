@@ -1,0 +1,17 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# IDE
+.idea/
+*.iml
+local.properties
+gradle.properties
+
+# Native libs (built from tslib)
+app/src/main/jniLibs/
+
+# OS
+.DS_Store
+Thumbs.db
