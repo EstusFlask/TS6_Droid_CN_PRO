@@ -55,11 +55,6 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.ViewTreeLifecycleOwner
-import androidx.lifecycle.ViewTreeSavedStateRegistryOwner
-import androidx.lifecycle.ViewTreeViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
 import dev.tsdroid.MainActivity
 import dev.tsdroid.R
 import dev.tsdroid.TsDroidApp
@@ -75,7 +70,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class TsConnectionService : Service(), LifecycleOwner, SavedStateRegistryOwner, ViewModelStoreOwner {
+class TsConnectionService : Service(), LifecycleOwner, ViewModelStoreOwner {
 
     companion object {
         private const val TAG = "TsConnService"
@@ -135,11 +130,9 @@ class TsConnectionService : Service(), LifecycleOwner, SavedStateRegistryOwner, 
     private var overlayLayoutParams: WindowManager.LayoutParams? = null
 
     private val lifecycleRegistry = LifecycleRegistry(this)
-    private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val serviceViewModelStore = ViewModelStore()
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
-    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
     override val viewModelStore: ViewModelStore get() = serviceViewModelStore
 
     private var overlayConnected by mutableStateOf(false)
@@ -159,7 +152,6 @@ class TsConnectionService : Service(), LifecycleOwner, SavedStateRegistryOwner, 
         overlayTouchSlop = ViewConfiguration.get(this).scaledTouchSlop
         audioBridge = AudioBridge(applicationContext, tsClient)
         audioBridge.initialize()
-        savedStateRegistryController.performRestore(null)
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
 
         // Listen for audio events, talk status, and play per-user mixing
@@ -291,9 +283,6 @@ class TsConnectionService : Service(), LifecycleOwner, SavedStateRegistryOwner, 
         }
 
         composeView = ComposeView(this).apply {
-            ViewTreeLifecycleOwner.set(this, this@TsConnectionService)
-            ViewTreeSavedStateRegistryOwner.set(this, this@TsConnectionService)
-            ViewTreeViewModelStoreOwner.set(this, this@TsConnectionService)
             setContent {
                 FloatingOverlayContent(
                     connected = overlayConnected,
