@@ -38,6 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.*
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.tsdroid.MainActivity
 import dev.tsdroid.R
@@ -57,7 +60,13 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class TsConnectionService : LifecycleService() {
+class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateRegistryOwner {
+
+    private val serviceViewModelStore = ViewModelStore()
+    private val savedStateRegistryController = SavedStateRegistryController.create(this)
+
+    override val viewModelStore: ViewModelStore get() = serviceViewModelStore
+    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
 
     companion object {
         private const val TAG = "TsConnService"
@@ -98,6 +107,7 @@ class TsConnectionService : LifecycleService() {
         super.onCreate()
         instance = this
         Log.d(TAG, "Foreground Service Created")
+        savedStateRegistryController.performRestore(null)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         audioBridge = AudioBridge(applicationContext, tsClient)
         audioBridge.initialize()
@@ -356,6 +366,7 @@ class TsConnectionService : LifecycleService() {
 
     override fun onDestroy() {
         instance = null
+        serviceViewModelStore.clear()
         hideFloatingWindow()
         audioBridge.release()
         serviceScope.cancel()

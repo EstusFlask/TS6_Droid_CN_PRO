@@ -113,6 +113,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         _connectionState.value = ConnectionState.CONNECTING
         _error.value = null
 
+        val context = getApplication<Application>()
+
         // Check for overlay permission before starting the service
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
             _connectionState.value = ConnectionState.DISCONNECTED
