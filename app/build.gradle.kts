@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.tsdroid"
+    namespace = "dev.tsdroid.han"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.flammedemon.ts6droid"
+        applicationId = "com.yuaxi.ts6droid.cn"
         minSdk = 29
         targetSdk = 35
         versionCode = 2
