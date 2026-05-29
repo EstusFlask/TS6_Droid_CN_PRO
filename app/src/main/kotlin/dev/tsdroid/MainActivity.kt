@@ -2,6 +2,7 @@ package dev.tsdroid
 
 import android.os.Bundle
 import android.content.Context
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     private val connectionViewModel: ConnectionViewModel by viewModels()
+    private val TAG = "MainActivity"
 
     override fun attachBaseContext(newBase: Context) {
         val languageTag = runBlocking(Dispatchers.IO) {
@@ -47,11 +49,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        Log.d(TAG, "onStart: hiding floating window")
         connectionViewModel.hideFloatingWindow()
     }
 
     override fun onStop() {
         super.onStop()
+        Log.d(TAG, "onStop: showing floating window")
         if (!isChangingConfigurations) {
             connectionViewModel.showFloatingWindow()
         }

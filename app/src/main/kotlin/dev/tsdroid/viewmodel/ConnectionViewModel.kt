@@ -32,6 +32,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        private const val TAG = "ConnectionViewModel"
+    }
 
     companion object {
         /** Survit aux recréations du ViewModel dans le même processus. */
@@ -317,12 +320,23 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun showFloatingWindow() {
-        if (_connectionState.value != ConnectionState.CONNECTED) return
-        serviceBinder?.service?.showFloatingWindow() ?: TsConnectionService.showOverlay(getApplication())
+        if (_connectionState.value != ConnectionState.CONNECTED) {
+            Log.d(TAG, "showFloatingWindow skipped: not connected (state=${_connectionState.value})")
+            return
+        }
+        Log.d(TAG, "showFloatingWindow: connected, invoking overlay")
+        serviceBinder?.service?.showFloatingWindow() ?: run {
+            Log.d(TAG, "showFloatingWindow: no binder, using service intent fallback")
+            TsConnectionService.showOverlay(getApplication())
+        }
     }
 
     fun hideFloatingWindow() {
-        serviceBinder?.service?.hideFloatingWindow() ?: TsConnectionService.hideOverlay(getApplication())
+        Log.d(TAG, "hideFloatingWindow")
+        serviceBinder?.service?.hideFloatingWindow() ?: run {
+            Log.d(TAG, "hideFloatingWindow: no binder, using service intent fallback")
+            TsConnectionService.hideOverlay(getApplication())
+        }
     }
 
     override fun onCleared() {

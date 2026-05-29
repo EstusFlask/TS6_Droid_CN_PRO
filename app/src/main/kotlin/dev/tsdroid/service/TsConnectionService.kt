@@ -50,16 +50,16 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
-import androidx.core.view.ViewTreeLifecycleOwner
-import androidx.core.view.ViewTreeSavedStateRegistryOwner
-import androidx.core.view.ViewTreeViewModelStoreOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.SavedStateRegistry
-import androidx.lifecycle.SavedStateRegistryController
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.ViewTreeSavedStateRegistryOwner
+import androidx.lifecycle.ViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
 import dev.tsdroid.MainActivity
 import dev.tsdroid.R
 import dev.tsdroid.TsDroidApp
@@ -138,9 +138,9 @@ class TsConnectionService : Service(), LifecycleOwner, SavedStateRegistryOwner, 
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val serviceViewModelStore = ViewModelStore()
 
-    override fun getLifecycle(): Lifecycle = lifecycleRegistry
-    override fun getSavedStateRegistry(): SavedStateRegistry = savedStateRegistryController.savedStateRegistry
-    override fun getViewModelStore(): ViewModelStore = serviceViewModelStore
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
+    override val viewModelStore: ViewModelStore get() = serviceViewModelStore
 
     private var overlayConnected by mutableStateOf(false)
     private var overlayChannelName by mutableStateOf<String?>(null)
@@ -266,11 +266,15 @@ class TsConnectionService : Service(), LifecycleOwner, SavedStateRegistryOwner, 
     }
 
     fun showFloatingWindow() {
+        Log.d(TAG, "showFloatingWindow called")
         if (!hasOverlayPermission()) {
             Log.w(TAG, "Cannot show floating window because overlay permission is missing")
             return
         }
-        if (overlayView != null) return
+        if (overlayView != null) {
+            Log.d(TAG, "showFloatingWindow skipped: already visible")
+            return
+        }
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -565,6 +569,7 @@ class TsConnectionService : Service(), LifecycleOwner, SavedStateRegistryOwner, 
     }
 
     fun hideFloatingWindow() {
+        Log.d(TAG, "hideFloatingWindow called")
         cancelPushToTalk()
         hideDismissZone()
         overlayView?.let { view ->
