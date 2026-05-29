@@ -19,10 +19,13 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
@@ -391,146 +395,199 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         onChannelClick: (Long) -> Unit,
         onClose: () -> Unit
     ) {
-        if (isExpanded) {
-            // Expanded Control Panel
-            Card(
-                modifier = Modifier
-                    .width(280.dp)
-                    .height(350.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Header (Draggable)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .pointerInput(Unit) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    onDrag(dragAmount.x, dragAmount.y)
-                                }
-                            }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .background(
-                                    if (connected) Color(0xFF4CAF50) else Color(0xFFF44336),
-                                    CircleShape
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = channelName ?: "Offline",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1
-                        )
-                        IconButton(onClick = onToggleExpand, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Collapse", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                        }
-                    }
+        val CardBackgroundTransparent = Color(0x991A1A1A) // ~60% alpha dark glass base
+        val SurfaceMutedTransparent = Color(0x33FFFFFF) // Subdued element backgrounds
 
-                    // Channel List
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        if (channels.isNotEmpty()) {
-                            ChannelTree(
-                                channels = channels,
-                                users = users,
-                                onChannelClick = onChannelClick,
-                                modifier = Modifier.fillMaxSize()
+        // Find current channel users
+        val myId = tsClient.clientId
+        val currentChannelId = users.find { it.id == myId }?.channelId
+        val activeUsers = users.filter { it.channelId == currentChannelId }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent) // Force the root container token to be 100% transparent
+        ) {
+            if (!isExpanded) {
+                // --- COLLAPSED AVATAR BUBBLE ---
+                Surface(
+                    modifier = Modifier
+                        .size(76.dp)
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                onDrag(dragAmount.x, dragAmount.y)
+                            }
+                        }
+                        .clickable { onToggleExpand() },
+                    shape = CircleShape,
+                    color = CardBackgroundTransparent, // Semitransparent ring
+                    border = BorderStroke(1.dp, Color(0x4DFFFFFF))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        // Render Avatar Circle + Mini Speaker Waveform Indicator
+                        if (!activeSpeakerName.isNullOrEmpty()) {
+                            Icon(
+                                Icons.Default.VolumeUp,
+                                contentDescription = "Active Speaker",
+                                tint = Color.White,
+                                modifier = Modifier.align(Alignment.Center).padding(bottom = 12.dp)
                             )
                         } else {
-                            Text(
-                                text = "No channels available",
-                                modifier = Modifier.align(Alignment.Center),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // Bottom Controls
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Output Mute Toggle
-                        IconButton(
-                            onClick = onToggleOutput,
-                            modifier = Modifier.background(
-                                if (isOutputMuted) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
-                                CircleShape
-                            )
-                        ) {
                             Icon(
-                                imageVector = if (isOutputMuted) Icons.Default.HeadsetOff else Icons.Default.Headset,
-                                contentDescription = "Toggle Output",
-                                tint = if (isOutputMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                Icons.Default.ChatBubble,
+                                contentDescription = "Open Panel",
+                                tint = if (connected) Color.White else Color.Gray,
+                                modifier = Modifier.align(Alignment.Center).padding(bottom = 12.dp)
                             )
                         }
-
-                        // Mic Mute Toggle
-                        IconButton(
-                            onClick = onToggleMic,
-                            modifier = Modifier.background(
-                                if (isMicMuted) MaterialTheme.colorScheme.errorContainer else Color.Transparent,
-                                CircleShape
-                            )
-                        ) {
-                            Icon(
-                                imageVector = if (isMicMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                                contentDescription = "Toggle Mic",
-                                tint = if (isMicMuted) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        
+                        Text(
+                            text = activeSpeakerName ?: "No Speaker",
+                            style = MaterialTheme.typography.labelSmall.copy(color = Color.White),
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-            }
-        } else {
-            // Collapsed Bubble
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(
-                        if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                        CircleShape
-                    )
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            onDrag(dragAmount.x, dragAmount.y)
+            } else {
+                // --- EXPANDED MINIMALIST PANEL ---
+                Card(
+                    modifier = Modifier
+                        .width(280.dp)
+                        .height(350.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardBackgroundTransparent), // Blends flawlessly over game/desktop backgrounds
+                    border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+                        // 1. Header Row (Title + Minimize Button)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        onDrag(dragAmount.x, dragAmount.y)
+                                    }
+                                }
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .background(
+                                        if (connected) Color(0xFF4CAF50) else Color(0xFFF44336),
+                                        CircleShape
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = channelName ?: "Offline",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            IconButton(onClick = onToggleExpand, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Minimize", tint = Color.White)
+                            }
+                        }
+
+                        Divider(color = SurfaceMutedTransparent, thickness = 1.dp)
+
+                        // 2. Simplified Channel User List (Scrollable, clean list items)
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        ) {
+                            items(activeUsers) { user ->
+                                val isSpeaking = user.nickname == activeSpeakerName
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp, horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(
+                                                if (isSpeaking) Color(0xFF4CAF50) else Color.Transparent,
+                                                CircleShape
+                                            )
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = user.nickname,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSpeaking) Color.White else Color(0xCCFFFFFF),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+
+                        Divider(color = SurfaceMutedTransparent, thickness = 1.dp)
+
+                        // 4. Quick Actions Toolbar (Mute, Deafen, Disconnect) with alpha surfaces
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Mic Mute Toggle
+                            IconButton(
+                                onClick = onToggleMic,
+                                modifier = Modifier.background(
+                                    if (isMicMuted) Color(0x66F44336) else SurfaceMutedTransparent,
+                                    CircleShape
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = if (isMicMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                                    contentDescription = "Toggle Mic",
+                                    tint = Color.White
+                                )
+                            }
+
+                            // Output Mute Toggle
+                            IconButton(
+                                onClick = onToggleOutput,
+                                modifier = Modifier.background(
+                                    if (isOutputMuted) Color(0x66F44336) else SurfaceMutedTransparent,
+                                    CircleShape
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = if (isOutputMuted) Icons.Default.HeadsetOff else Icons.Default.Headset,
+                                    contentDescription = "Toggle Output",
+                                    tint = Color.White
+                                )
+                            }
+
+                            // Disconnect
+                            IconButton(
+                                onClick = onClose,
+                                modifier = Modifier.background(SurfaceMutedTransparent, CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ExitToApp,
+                                    contentDescription = "Disconnect",
+                                    tint = Color(0xFFFF5252)
+                                )
+                            }
                         }
                     }
-                    .clickable { onToggleExpand() },
-                contentAlignment = Alignment.Center
-            ) {
-                if (!activeSpeakerName.isNullOrEmpty()) {
-                    Icon(
-                        Icons.Default.VolumeUp,
-                        contentDescription = "Active Speaker",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.ChatBubble,
-                        contentDescription = "Open Panel",
-                        tint = if (connected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
