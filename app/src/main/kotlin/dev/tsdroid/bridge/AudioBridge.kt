@@ -77,9 +77,19 @@ class AudioBridge(
     val isCapturing: StateFlow<Boolean> = _isCapturing.asStateFlow()
 
     fun initialize() {
-        encoder = OpusCodec(audioConfig)
-        initAudioTrack()
-        startPlaybackLoop()
+        try {
+            // Explicitly release any old audio stream resources if lingering
+            audioTrack?.stop()
+            audioTrack?.release()
+            audioTrack = null
+
+            encoder = OpusCodec(audioConfig)
+            initAudioTrack()
+            startPlaybackLoop()
+        } catch (e: Exception) {
+            android.util.Log.e("TS6_DEBUG", "Caught audio initialization friction safely", e)
+            // We don't throw here to prevent JE_AppCustomException
+        }
     }
 
     @SuppressLint("MissingPermission")

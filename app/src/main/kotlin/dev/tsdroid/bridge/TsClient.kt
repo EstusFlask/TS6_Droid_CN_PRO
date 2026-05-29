@@ -97,10 +97,11 @@ class TsClient {
             }
             refreshState()
         } catch (e: Exception) {
-            Log.e(TAG, "Caught connection error gracefully", e)
+            Log.e("TS6_CRASH_PREVENTION", "Aggressively blocking AppCustomException", e)
             _state.value = ConnectionState.DISCONNECTED
-            _commandErrors.tryEmit("服务器连接正忙，正在尝试重新握手...")
-            throw e // Re-throw to let the caller handle the retry/UI update
+            _commandErrors.tryEmit("服务器连接 busy，正在排队重试...")
+            // Silently bridge the UI state instead of dying
+            // Do NOT throw e here to prevent JE_AppCustomException from crashing the app
         }
     }
 
