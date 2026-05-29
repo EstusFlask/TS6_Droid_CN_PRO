@@ -242,7 +242,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 tsClient.setInputMuted(true)
             }
             // Start event loop
-            launch { tsClient.eventLoop() }
+            tsClient.startEventLoop()
         }
     }
 

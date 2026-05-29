@@ -20,6 +20,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
@@ -63,7 +69,8 @@ class TsClient {
     private val uploadCallbacks = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val fileListCallbacks = ConcurrentHashMap<String, CompletableDeferred<List<TsFileEntry>>>()
 
-    private val eventLoopRunning = AtomicBoolean(false)
+    private var eventLoopJob: Job? = null
+    private val clientCoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     val isConnected: Boolean
         get() = client?.isConnected == true
@@ -79,7 +86,13 @@ class TsClient {
         channel: String? = null,
     ) = withContext(Dispatchers.IO) {
         try {
+            // Phase 1: Pure physical reset of old client tokens
+            stopEventLoop()
             disconnect()
+            
+            // Phase 2: Start new handshake after a safe 300ms propagation delay
+            delay(300)
+            
             serverAddress = address
             val c = Client(address, identity, nickname, password, channel)
             client = c
@@ -105,13 +118,16 @@ class TsClient {
         }
     }
 
-    suspend fun eventLoop() {
-        // Guard: only one event loop runs at a time
-        if (!eventLoopRunning.compareAndSet(false, true)) return
-        try {
-            withContext(Dispatchers.IO) {
+    fun startEventLoop() {
+        // 1. Cancel any active event loop cleanly first
+        stopEventLoop()
+
+        // 2. Launch a completely fresh lifecycle track
+        eventLoopJob = clientCoroutineScope.launch {
+            try {
                 var refreshCounter = 0
-                while (coroutineContext.isActive && client != null) {
+                while (isActive && client != null) {
+                    ensureActive()
                     try {
                         val c = client ?: break
                         val events = c.processEvents() ?: emptyArray()
@@ -132,10 +148,22 @@ class TsClient {
                     }
                     delay(20)
                 }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "Event loop coroutine clean cancelled.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Gracefully trapped event loop runtime friction", e)
             }
-        } finally {
-            eventLoopRunning.set(false)
         }
+    }
+
+    fun stopEventLoop() {
+        eventLoopJob?.let {
+            if (it.isActive) {
+                it.cancel()
+                Log.d(TAG, "Killing stagnant legacy event loop forcefully.")
+            }
+        }
+        eventLoopJob = null
     }
 
     private fun handleEvent(event: Event) {
@@ -334,17 +362,9 @@ class TsClient {
     }
 
     fun disconnect() {
+        stopEventLoop()
         val c = client ?: return
-        // 1. Signal event loop to stop by nulling client
         client = null
-
-        // 2. Wait for event loop to actually exit (it checks client != null every ~20ms)
-        //    This prevents concurrent native access (Client is not thread-safe)
-        val deadline = System.currentTimeMillis() + 1000
-        while (eventLoopRunning.get() && System.currentTimeMillis() < deadline) {
-            Thread.sleep(20)
-        }
-        eventLoopRunning.set(false)
 
         // 3. Update state flows
         _state.value = ConnectionState.DISCONNECTED
