@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -96,6 +97,7 @@ class TsConnectionService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var overlayView: ComposeView? = null
+    private var composeView: ComposeView? = null
     private var overlayLayoutParams: WindowManager.LayoutParams? = null
 
     private var overlayConnected by mutableStateOf(false)
@@ -232,7 +234,7 @@ class TsConnectionService : Service() {
             y = 200
         }
 
-        val composeView = ComposeView(this).apply {
+        composeView = ComposeView(this).apply {
             setContent {
                 FloatingOverlayContent(
                     connected = overlayConnected,
@@ -280,12 +282,13 @@ class TsConnectionService : Service() {
                                 showDismissZone()
                             }
                             if (dragging && !longPressTriggered) {
+                                val activeComposeView = composeView ?: return true
                                 overlayLayoutParams?.let { layout ->
                                     layout.x = initialX + dx.toInt()
                                     layout.y = initialY + dy.toInt()
                                     try {
-                                        windowManager.updateViewLayout(composeView, layout)
-                                        updateDismissZoneHoverState(layout, composeView)
+                                        windowManager.updateViewLayout(activeComposeView, layout)
+                                        updateDismissZoneHoverState(layout, activeComposeView)
                                     } catch (_: Exception) {}
                                 }
                             }
@@ -299,11 +302,12 @@ class TsConnectionService : Service() {
                             } else if (!dragging) {
                                 openMainActivity()
                             } else {
+                                val activeComposeView = composeView
                                 overlayLayoutParams?.let { layout ->
                                     if (isInDismissZone) {
                                         hideFloatingWindow()
-                                    } else {
-                                        animateOverlayToEdge(layout, composeView)
+                                    } else if (activeComposeView != null) {
+                                        animateOverlayToEdge(layout, activeComposeView)
                                     }
                                 }
                             }
@@ -320,7 +324,7 @@ class TsConnectionService : Service() {
 
         overlayView = composeView
         overlayLayoutParams = params
-        windowManager.addView(composeView, params)
+        composeView?.let { windowManager.addView(it, params) }
     }
 
     private fun startPushToTalk() {
@@ -515,6 +519,7 @@ class TsConnectionService : Service() {
             }
         }
         overlayView = null
+        composeView = null
         overlayLayoutParams = null
     }
 
