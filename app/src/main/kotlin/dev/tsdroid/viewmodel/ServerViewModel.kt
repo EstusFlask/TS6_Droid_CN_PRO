@@ -298,9 +298,7 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
             // Apply persisted audio gain
             service.audioBridge.gainFactor = audioGain.value
             // Start event loop (guarded by AtomicBoolean — safe if already running)
-            viewModelScope.launch {
-                service.tsClient.eventLoop()
-            }
+            service.tsClient.startEventLoop()
             
             bound = true
         }
