@@ -400,21 +400,44 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
                             return
                         }
 
-                        Log.d(TAG, "Text message: target=$target sender=$sender text=${text.take(50)}")
+                        // Skip system error messages and abuse protection messages
+                        if (text.contains("滥用保护") || 
+                            text.contains("abuse protection") ||
+                            text.contains("flood protection") ||
+                            text.contains("Cannot perform this action due to") ||
+                            text.contains("无法采取此动作")) {
+                            Log.i(TAG, "Skipping system abuse protection message: $text")
+                            return
+                        }
+
+                        // Log safely with truncation to avoid huge strings
+                        val safeText = if (text.length > 200) text.take(200) + "..." else text
+                        Log.d(TAG, "Text message: target=$target sender=$sender text=$safeText")
 
                         // Skip our own messages — we already added them locally
                         val myId = tsClient?.clientId
                         if (myId != null && senderId == myId) return
 
-                        // Safely parse file attachment
+                        // Safely parse file attachment with extra protection
                         val attachment = try {
-                            parseFileAttachment(text)
+                            if (text.length > 10000) {
+                                Log.w(TAG, "Message too long, skipping file attachment parsing")
+                                null
+                            } else {
+                                parseFileAttachment(text)
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error parsing file attachment", e)
                             null
                         }
 
-                        val displayText = if (attachment != null) attachment.fileName else text
+                        // Use original text if attachment parsing fails, display safely
+                        val displayText = if (attachment != null) {
+                            attachment.fileName
+                        } else {
+                            // Sanitize text to avoid display issues
+                            text.replace("\u0000", "").trim()
+                        }
 
                         // Safely process based on message target
                         try {

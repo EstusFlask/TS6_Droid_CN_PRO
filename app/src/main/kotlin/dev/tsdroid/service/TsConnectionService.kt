@@ -111,6 +111,11 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     private var overlayActiveSpeakerName by mutableStateOf<String?>(null)
     private var overlayActiveSpeakerAvatar by mutableStateOf<ImageBitmap?>(null)
     
+    // Delay mechanism for overlay speaker state changes
+    private var pendingSpeakerId: Int? = null
+    private var speakerUpdateJob: kotlinx.coroutines.Job? = null
+    private const val SPEAKER_DELAY_MS = 500L
+    
     private lateinit var avatarCache: AvatarCache
 
     // Overlay state
@@ -150,31 +155,51 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 "talk_status_start" -> {
                     val speakerId = (event.data["user_id"] as? Number)?.toInt()
                     if (speakerId != null) {
-                        overlayActiveSpeakerId = speakerId
-                        overlayActiveSpeakerName = findUserNickname(speakerId)
-                        val speakerUser = tsClient.users.value.find { it.id == speakerId }
-                        val uid = speakerUser?.uid
-                        if (!uid.isNullOrEmpty()) {
-                            serviceScope.launch(Dispatchers.IO) {
-                                avatarCache.loadAvatar(uid, tsClient)
-                                val avatar = avatarCache.getAvatar(uid)
-                                withContext(Dispatchers.Main) {
-                                    if (overlayActiveSpeakerId == speakerId) {
-                                        overlayActiveSpeakerAvatar = avatar
+                        // Cancel any pending speaker stop
+                        speakerUpdateJob?.cancel()
+                        pendingSpeakerId = speakerId
+                        
+                        // Delay speaker update to avoid flickering
+                        speakerUpdateJob = serviceScope.launch {
+                            delay(SPEAKER_DELAY_MS)
+                            // Only update if still the pending speaker
+                            if (pendingSpeakerId == speakerId) {
+                                overlayActiveSpeakerId = speakerId
+                                overlayActiveSpeakerName = findUserNickname(speakerId)
+                                val speakerUser = tsClient.users.value.find { it.id == speakerId }
+                                val uid = speakerUser?.uid
+                                if (!uid.isNullOrEmpty()) {
+                                    serviceScope.launch(Dispatchers.IO) {
+                                        avatarCache.loadAvatar(uid, tsClient)
+                                        val avatar = avatarCache.getAvatar(uid)
+                                        withContext(Dispatchers.Main) {
+                                            if (overlayActiveSpeakerId == speakerId) {
+                                                overlayActiveSpeakerAvatar = avatar
+                                            }
+                                        }
                                     }
+                                } else {
+                                    overlayActiveSpeakerAvatar = null
                                 }
                             }
-                        } else {
-                            overlayActiveSpeakerAvatar = null
                         }
                     }
                 }
                 "talk_status_stop" -> {
                     val speakerId = (event.data["user_id"] as? Number)?.toInt()
                     if (speakerId != null && speakerId == overlayActiveSpeakerId) {
-                        overlayActiveSpeakerId = null
-                        overlayActiveSpeakerName = null
-                        overlayActiveSpeakerAvatar = null
+                        // Use delayed mechanism for speaker state changes
+                        pendingSpeakerId = null
+                        speakerUpdateJob?.cancel()
+                        speakerUpdateJob = serviceScope.launch {
+                            delay(SPEAKER_DELAY_MS)
+                            // Only update if still no pending speaker
+                            if (pendingSpeakerId == null) {
+                                overlayActiveSpeakerId = null
+                                overlayActiveSpeakerName = null
+                                overlayActiveSpeakerAvatar = null
+                            }
+                        }
                     }
                 }
             }
