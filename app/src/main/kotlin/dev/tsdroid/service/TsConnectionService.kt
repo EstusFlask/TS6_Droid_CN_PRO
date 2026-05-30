@@ -115,6 +115,9 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
 
     // Overlay state
     private var isOverlayExpanded by mutableStateOf(false)
+    private var positionBeforeExpand: Pair<Int, Int>? = null
+    private var lastSavedX = 100
+    private var lastSavedY = 300
     
     private var isIntentionalDisconnect = false
 
@@ -127,6 +130,9 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         avatarCache = AvatarCache(applicationContext.cacheDir)
         audioBridge = AudioBridge(applicationContext, tsClient)
         audioBridge.initialize()
+        
+        // Load saved floating window position
+        loadSavedPosition()
 
         // Listen for audio events, talk status, and play per-user mixing
         tsClient.events.onEach { event ->
@@ -338,8 +344,8 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
             gravity = Gravity.TOP or Gravity.START
-            x = 100
-            y = 300
+            x = lastSavedX
+            y = lastSavedY
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
@@ -369,7 +375,27 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                     activeSpeakerAvatar = overlayActiveSpeakerAvatar,
                     isLocalVoiceActive = isLocalVoiceActive,
                     isExpanded = isOverlayExpanded,
-                    onToggleExpand = { isOverlayExpanded = !isOverlayExpanded },
+                    onToggleExpand = { 
+                        overlayLayoutParams?.let { layout ->
+                            if (!isOverlayExpanded) {
+                                // Saving position before expanding
+                                positionBeforeExpand = Pair(layout.x, layout.y)
+                                Log.d(TAG, "Saved position before expand: ${positionBeforeExpand}")
+                            } else {
+                                // Restore position when collapsing
+                                positionBeforeExpand?.let { (x, y) ->
+                                    layout.x = x
+                                    layout.y = y
+                                    try {
+                                        windowManager.updateViewLayout(this, layout)
+                                    } catch (_: Exception) {}
+                                    Log.d(TAG, "Restored position after collapse: ($x, $y)")
+                                }
+                                positionBeforeExpand = null
+                            }
+                        }
+                        isOverlayExpanded = !isOverlayExpanded 
+                    },
                     onDrag = { dx, dy ->
                         overlayLayoutParams?.let { layout ->
                             val metrics = resources.displayMetrics
@@ -378,6 +404,11 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
 
                             layout.x = (layout.x + dx.toInt()).coerceIn(0, maxOf(0, maxX))
                             layout.y = (layout.y + dy.toInt()).coerceIn(0, maxOf(0, maxY))
+                            
+                            // Update cached position for persistence
+                            lastSavedX = layout.x
+                            lastSavedY = layout.y
+                            
                             try {
                                 windowManager.updateViewLayout(this, layout)
                             } catch (_: Exception) {}
@@ -438,6 +469,12 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         Log.d(TAG, "hideFloatingWindow called")
         overlayView?.let { view ->
             try {
+                // Save current position before removing the view
+                overlayLayoutParams?.let { params ->
+                    lastSavedX = params.x
+                    lastSavedY = params.y
+                    saveCachedPosition()
+                }
                 windowManager.removeViewImmediate(view)
             } catch (_: Exception) {
             }
@@ -445,6 +482,23 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         overlayView = null
         overlayLayoutParams = null
         isOverlayExpanded = false
+    }
+    
+    private fun saveCachedPosition() {
+        val prefs = getSharedPreferences("floating_window_prefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putInt("position_x", lastSavedX)
+            putInt("position_y", lastSavedY)
+            apply()
+        }
+        Log.d(TAG, "Saved floating window position: ($lastSavedX, $lastSavedY)")
+    }
+    
+    private fun loadSavedPosition() {
+        val prefs = getSharedPreferences("floating_window_prefs", Context.MODE_PRIVATE)
+        lastSavedX = prefs.getInt("position_x", 100)
+        lastSavedY = prefs.getInt("position_y", 300)
+        Log.d(TAG, "Loaded floating window position: ($lastSavedX, $lastSavedY)")
     }
 
     override fun onDestroy() {
