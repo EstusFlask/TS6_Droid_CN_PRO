@@ -376,56 +376,64 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleEvent(event: Event) {
-        when (event.type) {
-            "talk_status_start" -> {
-                val userId = (event.data["user_id"] as? Number)?.toInt() ?: return
-                _talkingUserIds.value = _talkingUserIds.value + userId
-            }
-            "talk_status_stop" -> {
-                val userId = (event.data["user_id"] as? Number)?.toInt() ?: return
-                _talkingUserIds.value = _talkingUserIds.value - userId
-            }
-            "text_message" -> {
-                val target = event.data["target"] as? String ?: ""
-                val sender = event.data["sender_name"] as? String ?: getApplication<Application>().getString(R.string.unknown_sender)
-                val senderId = (event.data["sender_id"] as? Number)?.toInt()
-                val text = event.data["message"] as? String ?: ""
+        try {
+            when (event.type) {
+                "talk_status_start" -> {
+                    val userId = (event.data["user_id"] as? Number)?.toInt() ?: return
+                    _talkingUserIds.value = _talkingUserIds.value + userId
+                }
+                "talk_status_stop" -> {
+                    val userId = (event.data["user_id"] as? Number)?.toInt() ?: return
+                    _talkingUserIds.value = _talkingUserIds.value - userId
+                }
+                "text_message" -> {
+                    try {
+                        val target = event.data["target"] as? String ?: ""
+                        val sender = event.data["sender_name"] as? String ?: getApplication<Application>().getString(R.string.unknown_sender)
+                        val senderId = (event.data["sender_id"] as? Number)?.toInt()
+                        val text = event.data["message"] as? String ?: ""
 
-                Log.d(TAG, "Text message: target=$target sender=$sender text=${text.take(50)}")
+                        Log.d(TAG, "Text message: target=$target sender=$sender text=${text.take(50)}")
 
-                // Skip our own messages — we already added them locally
-                val myId = tsClient?.clientId
-                if (myId != null && senderId == myId) return
+                        // Skip our own messages — we already added them locally
+                        val myId = tsClient?.clientId
+                        if (myId != null && senderId == myId) return
 
-                val attachment = parseFileAttachment(text)
-                val displayText = if (attachment != null) attachment.fileName else text
+                        val attachment = parseFileAttachment(text)
+                        val displayText = if (attachment != null) attachment.fileName else text
 
-                when (target) {
-                    "private" -> {
-                        val id = senderId ?: return
-                        val msg = ChatMessage(sender = sender, text = displayText, isPrivate = true, senderId = id, fileAttachment = attachment)
-                        val current = _privateMessages.value.toMutableMap()
-                        current[id] = (current[id] ?: emptyList()) + msg
-                        _privateMessages.value = current
-                        scheduleSave()
-                        // Only increment if chat is closed or not on this user's PM
-                        if (!isChatOpen || activeChatTab != 1 || activePmUserId != id) {
-                            val unread = _unreadPrivate.value.toMutableMap()
-                            unread[id] = (unread[id] ?: 0) + 1
-                            _unreadPrivate.value = unread
+                        when (target) {
+                            "private" -> {
+                                val id = senderId ?: return
+                                val msg = ChatMessage(sender = sender, text = displayText, isPrivate = true, senderId = id, fileAttachment = attachment)
+                                val current = _privateMessages.value.toMutableMap()
+                                current[id] = (current[id] ?: emptyList()) + msg
+                                _privateMessages.value = current
+                                scheduleSave()
+                                // Only increment if chat is closed or not on this user's PM
+                                if (!isChatOpen || activeChatTab != 1 || activePmUserId != id) {
+                                    val unread = _unreadPrivate.value.toMutableMap()
+                                    unread[id] = (unread[id] ?: 0) + 1
+                                    _unreadPrivate.value = unread
+                                }
+                            }
+                            "channel" -> {
+                                val msg = ChatMessage(sender = sender, text = displayText, fileAttachment = attachment)
+                                _channelMessages.value = _channelMessages.value + msg
+                                scheduleSave()
+                                // Only increment if chat is closed or not on channel tab
+                                if (!isChatOpen || activeChatTab != 0) {
+                                    _unreadChannel.value++
+                                }
+                            }
                         }
-                    }
-                    "channel" -> {
-                        val msg = ChatMessage(sender = sender, text = displayText, fileAttachment = attachment)
-                        _channelMessages.value = _channelMessages.value + msg
-                        scheduleSave()
-                        // Only increment if chat is closed or not on channel tab
-                        if (!isChatOpen || activeChatTab != 0) {
-                            _unreadChannel.value++
-                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing text_message event", e)
                     }
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in handleEvent", e)
         }
     }
 

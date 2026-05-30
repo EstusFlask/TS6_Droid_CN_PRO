@@ -149,7 +149,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 }
                 "talk_status_start" -> {
                     val speakerId = (event.data["user_id"] as? Number)?.toInt()
-                    if (speakerId != null && speakerId != tsClient.clientId) {
+                    if (speakerId != null) {
                         overlayActiveSpeakerId = speakerId
                         overlayActiveSpeakerName = findUserNickname(speakerId)
                         val speakerUser = tsClient.users.value.find { it.id == speakerId }
