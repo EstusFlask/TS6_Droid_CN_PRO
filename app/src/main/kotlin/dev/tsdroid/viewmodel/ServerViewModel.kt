@@ -108,8 +108,6 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
     val mutedUserIds: StateFlow<Set<Int>> = _mutedUserIds.asStateFlow()
 
     // Whisper (密聊) state — bridged from WhisperManager
-    val isWhisperActive: StateFlow<Boolean> = WhisperManager.isWhisperActive
-    val whisperTargetUserId: StateFlow<Int?> = WhisperManager.targetUserId
 
     // Users with isTalking patched from talk status events
     private val _users = MutableStateFlow<List<User>>(emptyList())
@@ -597,15 +595,11 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
     // ── Whisper (密聊) ──────────────────────────────────────────
 
     fun toggleWhisper(userId: Int) {
-        if (WhisperManager.isWhisperActive.value && WhisperManager.targetUserId.value == userId) {
-            WhisperManager.stopWhisper(tsClient)
-        } else {
-            WhisperManager.startWhisper(tsClient, userId)
-        }
+        WhisperManager.toggleWhisper(userId)
     }
 
     fun sendWhisperMessage(text: String) {
-        WhisperManager.sendWhisperMessage(tsClient, text)
+        WhisperManager.sendWhisperMessage(text)
     }
 
     val whisperCandidateUsers: List<User>

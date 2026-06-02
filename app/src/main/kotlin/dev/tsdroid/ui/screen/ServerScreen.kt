@@ -128,10 +128,9 @@ fun ServerScreen(
     var messageText by remember { mutableStateOf("") }
     var pmTargetId by remember { mutableStateOf<Int?>(null) }
 
-    // Whisper (密聊) state
-    val isWhisperActive by viewModel.isWhisperActive.collectAsState()
-    val whisperTargetUserId by viewModel.whisperTargetUserId.collectAsState()
-    val whisperTargetUser = whisperTargetUserId?.let { id -> users.find { it.id == id } }
+    // Whisper (密聊) state — read directly from WhisperManager
+    val whisperTargetNames = WhisperManager.whisperTargetNames
+    val whisperFirstTargetName = whisperTargetNames.firstOrNull()
 
     // Resolve pmTarget User from users list
     val pmTarget = pmTargetId?.let { id -> users.find { it.id == id } }
@@ -325,8 +324,8 @@ fun ServerScreen(
                     }
 
                     // Whisper (密聊) indicator — shows active state, click to stop
-                    if (isWhisperActive && whisperTargetUser != null) {
-                        IconButton(onClick = { viewModel.toggleWhisper(whisperTargetUserId!!) }) {
+                    if (WhisperManager.isWhisperActive && whisperFirstTargetName != null) {
+                        IconButton(onClick = { viewModel.toggleWhisper(WhisperManager.whisperTargets.first()) }) {
                             Icon(
                                 Icons.Default.Forum,
                                 contentDescription = "停止密聊",
@@ -449,7 +448,7 @@ fun ServerScreen(
                         onSelectPmUser = { userId -> pmTargetId = userId },
                         onClearPmTarget = { pmTargetId = null },
                         onSend = {
-                            if (isWhisperActive && whisperTargetUser != null) {
+                            if (WhisperManager.isWhisperActive && whisperFirstTargetName != null) {
                                 viewModel.sendWhisperMessage(messageText)
                             } else {
                                 when (chatTab) {
@@ -470,8 +469,8 @@ fun ServerScreen(
                             viewModel.uploadAndSendFile(fileName, data, chatTab == 1, pmTargetId)
                         },
                         onDownload = { attachment -> viewModel.downloadAttachment(attachment) },
-                        isWhisperActive = isWhisperActive,
-                        whisperTargetName = whisperTargetUser?.nickname,
+                        isWhisperActive = WhisperManager.isWhisperActive,
+                        whisperTargetName = whisperFirstTargetName,
                     )
                 }
             }
