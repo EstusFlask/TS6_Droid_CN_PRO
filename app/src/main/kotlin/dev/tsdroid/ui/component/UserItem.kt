@@ -46,6 +46,9 @@ import kotlin.math.absoluteValue
 import dev.tsdroid.han.R
 import dev.tslib.User
 
+import dev.tsdroid.service.WhisperManager
+
+import dev.tsdroid.service.WhisperManager
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.IconButton
 
@@ -140,7 +143,7 @@ fun UserItem(
                         Icons.Default.Forum,
                         contentDescription = "密聊",
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        tint = if (WhisperManager.isWhisperActive && WhisperManager.whisperTargets.contains(user.id)) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
                 }
             }

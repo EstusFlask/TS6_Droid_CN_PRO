@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -233,7 +234,7 @@ fun ServerScreen(
                             Icon(
                                 Icons.Default.ChatBubble,
                                 contentDescription = stringResource(R.string.chat),
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = Color(0xFF4CAF50),
                             )
                         }
                         if (totalUnread > 0) {
@@ -329,7 +330,7 @@ fun ServerScreen(
                             Icon(
                                 Icons.Default.Forum,
                                 contentDescription = "停止密聊",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = Color(0xFF4CAF50),
                             )
                         }
                     } else {
