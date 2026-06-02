@@ -47,8 +47,6 @@ import dev.tsdroid.han.R
 import dev.tslib.User
 
 import dev.tsdroid.service.WhisperManager
-
-import dev.tsdroid.service.WhisperManager
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.IconButton
 
