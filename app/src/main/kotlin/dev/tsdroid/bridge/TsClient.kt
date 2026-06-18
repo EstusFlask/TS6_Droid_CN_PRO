@@ -113,8 +113,12 @@ class TsClient {
                     }
                 }
                 refreshState()
+                if (client == null) {
+                    throw IllegalStateException("Connection closed during initial state sync")
+                }
             } catch (e: Throwable) {
                 Log.e("TS6_CRASH_PREVENTION", "Aggressively blocking AppCustomException", e)
+                val wasConnected = _state.value == ConnectionState.CONNECTED
                 _state.value = ConnectionState.DISCONNECTED
                 _commandErrors.tryEmit("服务器连接 busy，正在排队重试...")
                 
@@ -124,9 +128,21 @@ class TsClient {
                 val failedClient = client
                 client = null
                 if (failedClient != null) {
+                    if (wasConnected) {
+                        try {
+                            failedClient.disconnect()
+                            val flushEnd = System.currentTimeMillis() + 500
+                            while (System.currentTimeMillis() < flushEnd) {
+                                failedClient.processEvents()
+                                Thread.sleep(20)
+                            }
+                        } catch (disconnectError: Throwable) {
+                            Log.w(TAG, "disconnect after connected init failure failed", disconnectError)
+                        }
+                    }
                     try {
                         failedClient.close() // Safe memory free instead of .disconnect()
-                    } catch (_: Exception) {}
+                    } catch (_: Throwable) {}
                 }
                 
                 // In order to properly stop TsConnectionService from proceeding to start audioBridge/eventLoop
@@ -159,17 +175,22 @@ class TsClient {
                             refreshState()
                             refreshCounter = 0
                         }
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
+                        if (e is CancellationException) throw e
                         if (client == null) break
+                        Log.e(TAG, "Event loop native failure; closing connection", e)
                         _state.value = ConnectionState.DISCONNECTED
+                        closeAfterNativeFailure()
                         break
                     }
                     delay(20)
                 }
             } catch (e: CancellationException) {
                 Log.d(TAG, "Event loop coroutine clean cancelled.")
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Gracefully trapped event loop runtime friction", e)
+                _state.value = ConnectionState.DISCONNECTED
+                closeAfterNativeFailure()
             }
         }
     }
@@ -247,8 +268,30 @@ class TsClient {
             _serverInfo.value = c.serverInfo
             val st = c.state
             if (_state.value != st) _state.value = st
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w(TAG, "refreshState failed", e)
+            closeAfterNativeFailure()
+        }
+    }
+
+    private fun closeAfterNativeFailure() {
+        val c = client ?: return
+        client = null
+        _state.value = ConnectionState.DISCONNECTED
+        try {
+            c.disconnect()
+            val flushEnd = System.currentTimeMillis() + 500
+            while (System.currentTimeMillis() < flushEnd) {
+                c.processEvents()
+                Thread.sleep(20)
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "disconnect after native failure failed", e)
+        }
+        try {
+            c.close()
+        } catch (e: Throwable) {
+            Log.w(TAG, "close after native failure failed", e)
         }
     }
 

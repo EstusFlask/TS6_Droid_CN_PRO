@@ -395,7 +395,8 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 // Initialize whisper manager
                 WhisperManager.init(tsClient)
                 WhisperBridge.tryLoad()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e(TAG, "Connection error", e)
                 withContext(Dispatchers.Main) {
                     android.widget.Toast.makeText(
@@ -636,6 +637,13 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         instance = null
         serviceViewModelStore.clear()
         hideFloatingWindow()
+        if (!isIntentionalDisconnect && tsClient.isConnected) {
+            try {
+                tsClient.disconnect()
+            } catch (e: Throwable) {
+                Log.w(TAG, "Best-effort disconnect during service destroy failed", e)
+            }
+        }
         audioBridge.release()
         serviceScope.cancel()
         super.onDestroy()
