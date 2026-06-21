@@ -52,7 +52,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.tsdroid.MainActivity
-import dev.tsdroid.han.R
+import dev.tsdroid.pro.R
 import dev.tsdroid.TsDroidApp
 import dev.tsdroid.bridge.AudioBridge
 import dev.tsdroid.bridge.AvatarCache
@@ -83,8 +83,8 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     companion object {
         private const val TAG = "TsConnService"
         private const val NOTIFICATION_ID = 1
-        private const val ACTION_DISCONNECT = "com.flammedemon.ts6droid.DISCONNECT"
-        private const val ACTION_TOGGLE_MUTE = "com.flammedemon.ts6droid.TOGGLE_MUTE"
+        private const val ACTION_DISCONNECT = "com.estusflask.ts6droidpro.DISCONNECT"
+        private const val ACTION_TOGGLE_MUTE = "com.estusflask.ts6droidpro.TOGGLE_MUTE"
         private const val SPEAKER_DELAY_MS = 500L
         private const val AVATAR_REFRESH_INTERVAL_MS = 30000L // 30 seconds
 

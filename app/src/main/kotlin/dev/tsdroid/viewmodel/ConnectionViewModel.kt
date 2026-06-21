@@ -17,7 +17,7 @@ import androidx.lifecycle.viewModelScope
 import dev.tsdroid.bridge.MAX_NICKNAME_COLLISION_ATTEMPTS
 import dev.tsdroid.bridge.hasNicknameCollision
 import dev.tsdroid.bridge.nicknameWithCollisionSuffix
-import dev.tsdroid.han.R
+import dev.tsdroid.pro.R
 import dev.tsdroid.data.BookmarkStore
 import dev.tsdroid.data.ServerBookmark
 import dev.tsdroid.service.TsConnectionService

@@ -3,7 +3,7 @@ package dev.tsdroid
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import dev.tsdroid.han.R
+import dev.tsdroid.pro.R
 
 class TsDroidApp : Application() {
 

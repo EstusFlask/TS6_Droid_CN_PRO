@@ -84,7 +84,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.tsdroid.data.SettingsStore
-import dev.tsdroid.han.R
+import dev.tsdroid.pro.R
 import dev.tslib.ConnectionState
 import dev.tslib.User
 import dev.tsdroid.ui.component.ChannelTree

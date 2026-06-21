@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.tsdroid.han"
+    namespace = "dev.tsdroid.pro"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.yuaxi.ts6droid.cn"
+        applicationId = "com.estusflask.ts6droidpro"
         minSdk = 29
         targetSdk = 35
         versionCode = 5
