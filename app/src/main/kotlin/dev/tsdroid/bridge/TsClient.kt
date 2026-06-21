@@ -158,8 +158,11 @@ class TsClient {
                     } catch (e: Throwable) {
                         if (e is CancellationException) throw e
                         lastFailure = e
-                        retrying = true
+                        retrying = e.isNicknameCollisionFailure()
                         Log.w(TAG, "Connection attempt failed with nickname '$candidateNickname'", e)
+                        if (!retrying || attempt == MAX_NICKNAME_COLLISION_ATTEMPTS - 1) {
+                            throw e
+                        }
                     } finally {
                         pendingClient?.let {
                             if (pendingClientConnected) {
@@ -194,6 +197,27 @@ class TsClient {
             current = current.cause
         }
         return fallback
+    }
+
+    private fun Throwable.isNicknameCollisionFailure(): Boolean {
+        var current: Throwable? = this
+        while (current != null) {
+            val message = current.message?.lowercase().orEmpty()
+            if (
+                "nickname" in message &&
+                (
+                    "already" in message ||
+                    "in use" in message ||
+                    "taken" in message ||
+                    "duplicate" in message ||
+                    "exists" in message
+                )
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 
     fun startEventLoop() {
