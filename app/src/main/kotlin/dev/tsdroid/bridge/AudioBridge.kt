@@ -9,7 +9,6 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
-import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.tsdroid.data.SettingsStore
@@ -29,7 +28,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.abs
 
 class AudioBridge(
     private val context: Context,
@@ -44,11 +42,9 @@ class AudioBridge(
         private const val FRAME_SIZE_BYTES = FRAME_SIZE_SAMPLES * 2 // 16-bit PCM = 2 bytes/sample
         private const val MAX_QUEUE_FRAMES = 10 // Max buffered frames per user
         private const val LOCAL_VOICE_ACTIVE_THRESHOLD_DB = -46.8f
-        private const val DEFAULT_NOISE_FLOOR_DB = -72.0f
         private const val VOICE_ACTIVITY_RELEASE_MARGIN_DB = 6.0f
         private const val VOICE_ACTIVITY_HOLD_FRAMES = 12 // 240 ms at 20 ms/frame
         private const val VOICE_ACTIVITY_PRE_ROLL_FRAMES = 3 // 60 ms at 20 ms/frame
-        private const val NOISE_SUPPRESSION_SPEECH_HOLD_FRAMES = 8
     }
 
     private val audioConfig = AudioConfig()
@@ -62,13 +58,10 @@ class AudioBridge(
 
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
-    private var noiseSuppressor: NoiseSuppressor? = null
-    private val noiseSuppressorLock = Any()
 
     private var captureJob: Job? = null
     private var playbackJob: Job? = null
-    private var noiseFloorDb = DEFAULT_NOISE_FLOOR_DB
-    private var speechHoldFrames = 0
+    private var rnNoise: RnNoise? = null
 
     // Dedicated single-thread scope for audio playback
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -87,16 +80,6 @@ class AudioBridge(
 
     @Volatile
     var noiseSuppressionEnabled: Boolean = false
-        set(value) {
-            field = value
-            synchronized(noiseSuppressorLock) {
-                try {
-                    noiseSuppressor?.enabled = value
-                } catch (e: Throwable) {
-                    Log.w(TAG, "Failed to update platform noise suppressor", e)
-                }
-            }
-        }
 
     @Volatile
     var noiseSuppressionLevel: Int = SettingsStore.DEFAULT_NOISE_SUPPRESSION_LEVEL
@@ -170,19 +153,16 @@ class AudioBridge(
             record.release()
             return
         }
-        attachNoiseSuppressor(record)
         try {
             record.startRecording()
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to start microphone capture", e)
-            releaseNoiseSuppressor()
             record.release()
             return
         }
         audioRecord = record
         _isCapturing.value = true
-        noiseFloorDb = DEFAULT_NOISE_FLOOR_DB
-        speechHoldFrames = 0
+        rnNoise = RnNoise()
 
         captureJob = scope.launch(Dispatchers.IO) {
             val buffer = ShortArray(FRAME_SIZE_SAMPLES)
@@ -266,7 +246,7 @@ class AudioBridge(
             _isLocalVoiceActive.value = false
             val finishedRecord = audioRecord
             audioRecord = null
-            releaseNoiseSuppressor()
+            releaseRnNoise()
             try {
                 finishedRecord?.stop()
             } catch (_: Throwable) {
@@ -282,7 +262,7 @@ class AudioBridge(
         _isCapturing.value = false
         captureJob?.cancel()
         captureJob = null
-        releaseNoiseSuppressor()
+        releaseRnNoise()
         audioRecord?.stop()
         audioRecord?.release()
         audioRecord = null
@@ -466,118 +446,36 @@ class AudioBridge(
         return (20.0 * Math.log10(rms / Short.MAX_VALUE)).toFloat()
     }
 
-    private fun attachNoiseSuppressor(record: AudioRecord) {
-        releaseNoiseSuppressor()
-        if (!NoiseSuppressor.isAvailable()) return
-
-        try {
-            val suppressor = NoiseSuppressor.create(record.audioSessionId) ?: return
-            suppressor.enabled = noiseSuppressionEnabled
-            synchronized(noiseSuppressorLock) {
-                noiseSuppressor = suppressor
-            }
-        } catch (e: Throwable) {
-            Log.w(TAG, "Platform noise suppressor is unavailable for this capture session", e)
-        }
-    }
-
-    private fun releaseNoiseSuppressor() {
-        val suppressor = synchronized(noiseSuppressorLock) {
-            val current = noiseSuppressor
-            noiseSuppressor = null
-            current
-        }
-        try {
-            suppressor?.enabled = false
-        } catch (_: Throwable) {
-        }
-        try {
-            suppressor?.release()
-        } catch (_: Throwable) {
-        }
-    }
-
     private fun applyNoiseSuppression(samples: ShortArray, count: Int) {
+        val processor = rnNoise ?: return
+        val frameSize = RnNoise.frameSize
+        if (frameSize <= 0 || count < frameSize) return
+        val mix = rnNoiseMix()
+        var offset = 0
+        while (offset + frameSize <= count) {
+            processor.process(samples, offset, mix)
+            offset += frameSize
+        }
+    }
+
+    private fun rnNoiseMix(): Float {
         val level = noiseSuppressionLevel.coerceIn(
             SettingsStore.MIN_NOISE_SUPPRESSION_LEVEL,
             SettingsStore.MAX_NOISE_SUPPRESSION_LEVEL,
         )
-        suppressIsolatedImpulses(samples, count, level)
-
-        val inputRmsDb = calculateRmsDb(samples, count)
-        if (inputRmsDb == Float.NEGATIVE_INFINITY || inputRmsDb.isNaN()) return
-
-        updateNoiseFloor(inputRmsDb)
-
-        val marginDb = 6.0f + level * 3.0f
-        val transitionDb = 5.0f + level
-        val minimumGain = when (level) {
-            0 -> 0.40f
-            1 -> 0.12f
-            2 -> 0.03f
-            else -> 0.0f
-        }
-        val speechThresholdDb = noiseFloorDb + marginDb
-
-        if (inputRmsDb >= speechThresholdDb + transitionDb) {
-            speechHoldFrames = NOISE_SUPPRESSION_SPEECH_HOLD_FRAMES
-            return
-        }
-
-        if (speechHoldFrames > 0) {
-            speechHoldFrames--
-            return
-        }
-
-        val openness = ((inputRmsDb - speechThresholdDb) / transitionDb).coerceIn(0.0f, 1.0f)
-        val gain = minimumGain + (1.0f - minimumGain) * openness
-        if (gain >= 0.99f) return
-
-        val residualGate = when (level) {
-            0 -> 0
-            1 -> 16
-            2 -> 32
-            else -> 48
-        }
-        for (i in 0 until count) {
-            val value = (samples[i] * gain).toInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            samples[i] = if (abs(value) <= residualGate) 0 else value.toShort()
+        return when (level) {
+            0 -> 0.55f
+            1 -> 0.70f
+            2 -> 0.85f
+            else -> 1.0f
         }
     }
 
-    private fun suppressIsolatedImpulses(samples: ShortArray, count: Int, level: Int) {
-        if (count < 3) return
-
-        val impulseThreshold = when (level) {
-            0 -> 256
-            1 -> 128
-            2 -> 96
-            else -> 64
+    private fun releaseRnNoise() {
+        try {
+            rnNoise?.close()
+        } catch (_: Throwable) {
         }
-
-        for (i in 1 until count - 1) {
-            val previous = samples[i - 1].toInt()
-            val current = samples[i].toInt()
-            val next = samples[i + 1].toInt()
-            val interpolated = (previous + next) / 2
-            val deviation = abs(current - interpolated)
-            val neighborDelta = abs(previous - next)
-
-            if (
-                deviation >= impulseThreshold &&
-                deviation >= neighborDelta * 4 + impulseThreshold / 2
-            ) {
-                samples[i] = interpolated.toShort()
-            }
-        }
-    }
-
-    private fun updateNoiseFloor(rmsDb: Float) {
-        noiseFloorDb = when {
-            rmsDb < noiseFloorDb -> noiseFloorDb * 0.90f + rmsDb * 0.10f
-            rmsDb < noiseFloorDb + 12.0f -> noiseFloorDb * 0.995f + rmsDb * 0.005f
-            else -> noiseFloorDb
-        }.coerceIn(-90.0f, -35.0f)
+        rnNoise = null
     }
 }

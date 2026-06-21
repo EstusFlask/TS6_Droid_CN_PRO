@@ -26,7 +26,7 @@ class SettingsStore(private val context: Context) {
     companion object {
         const val MIN_VOICE_ACTIVITY_THRESHOLD_DB = -80.0f
         const val MAX_VOICE_ACTIVITY_THRESHOLD_DB = 0.0f
-        const val DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB = -40.0f
+        const val DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB = -30.0f
         const val MIN_NOISE_SUPPRESSION_LEVEL = 0
         const val MAX_NOISE_SUPPRESSION_LEVEL = 3
         const val DEFAULT_NOISE_SUPPRESSION_LEVEL = 1

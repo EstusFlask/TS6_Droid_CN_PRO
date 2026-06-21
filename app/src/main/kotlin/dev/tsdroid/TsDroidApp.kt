@@ -12,6 +12,7 @@ class TsDroidApp : Application() {
 
         init {
             System.loadLibrary("tslib_jni")
+            System.loadLibrary("tsdroid_audio")
         }
     }
 
