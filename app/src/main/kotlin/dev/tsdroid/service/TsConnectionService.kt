@@ -311,6 +311,12 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        if (intent == null) {
+            Log.d(TAG, "Ignoring sticky restart without an explicit intent")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
         startServiceForeground()
         
         when (intent?.action) {
@@ -322,7 +328,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 updateNotification()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -418,6 +424,10 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     }
 
     fun disconnect() {
+        disconnectAndStop()
+    }
+
+    private fun disconnectAndStop() {
         isIntentionalDisconnect = true
         if (instance == this) {
             instance = null
@@ -435,6 +445,12 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
                 }
             }
         }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "Task removed; disconnecting foreground TS session")
+        disconnectAndStop()
+        super.onTaskRemoved(rootIntent)
     }
 
     private fun hasOverlayPermission(): Boolean {
