@@ -160,45 +160,13 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             try {
                 val identity = getOrCreateIdentity()
                 val pw = password.value.trim().takeIf { it.isNotEmpty() }
-                val ch = channel.value.trim().takeIf { it.isNotEmpty() }
-                service.connect(addr, identity, nick, pw)
-                // Note: The original code passed 'ch' to connect, but TsConnectionService.connect doesn't take a channel parameter.
-                // If channel joining is needed, it should be handled after connection.
-
-                // Observe the actual connection state from the service.
-                // We track whether we ever reached CONNECTED to distinguish
-                // "rejected before connecting" from "disconnected after being connected".
-                // Skip initial DISCONNECTED emission — only treat it as failure after
-                // we've observed CONNECTING (meaning the attempt actually started).
-                var wasConnected = false
-                var sawConnecting = false
-                val result = kotlinx.coroutines.withTimeoutOrNull(30_000L) {
-                    service.tsClient.state.first { state ->
-                        _connectionState.value = state
-                        when {
-                            state == ConnectionState.CONNECTING -> {
-                                sawConnecting = true
-                                false // keep waiting
-                            }
-                            state == ConnectionState.CONNECTED -> {
-                                wasConnected = true
-                                true // terminal state — stop collecting
-                            }
-                            state == ConnectionState.DISCONNECTED && sawConnecting -> {
-                                true // terminal state — connection was rejected
-                            }
-                            else -> false // keep waiting
-                        }
-                    }
-                }
-
-                if (wasConnected) {
+                val connectionFailure = service.connect(addr, identity, nick, pw)
+                if (connectionFailure == null) {
+                    _connectionState.value = ConnectionState.CONNECTED
                     onConnected()
                 } else {
-                    // Either timed out or server rejected the connection
                     _connectionState.value = ConnectionState.DISCONNECTED
-                    val errorMsg = service.tsClient.commandErrors.replayCache.lastOrNull()
-                    _error.value = errorMsg
+                    _error.value = connectionFailure.message
                         ?: getApplication<Application>().getString(R.string.connection_failed)
                 }
             } catch (e: CancellationException) {

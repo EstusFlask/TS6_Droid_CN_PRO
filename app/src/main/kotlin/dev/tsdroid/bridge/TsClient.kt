@@ -115,10 +115,12 @@ class TsClient {
                 for (attempt in 0 until MAX_NICKNAME_COLLISION_ATTEMPTS) {
                     val candidateNickname = nicknameWithCollisionSuffix(nickname, attempt)
                     var pendingClient: Client? = null
+                    var pendingClientConnected = false
                     try {
                         val c = Client(address, identity, candidateNickname, password, channel)
                         pendingClient = c
                         c.waitConnected()
+                        pendingClientConnected = true
                         // Log immediately after waitConnected
                         val users = c.users
                         val channels = c.channels
@@ -151,7 +153,11 @@ class TsClient {
                         Log.w(TAG, "Connection attempt failed with nickname '$candidateNickname'", e)
                     } finally {
                         pendingClient?.let {
-                            closeClient(it, "failed connection attempt")
+                            if (pendingClientConnected) {
+                                closeClient(it, "failed connection attempt")
+                            } else {
+                                destroyClient(it, "failed connection attempt before connected")
+                            }
                         }
                     }
                 }
@@ -322,24 +328,32 @@ class TsClient {
     }
 
     private fun closeClient(c: Client, reason: String) {
+        var disconnectSent = false
         try {
             c.disconnect()
+            disconnectSent = true
             Log.d(TAG, "Native disconnect command sent ($reason)")
         } catch (e: Throwable) {
             Log.w(TAG, "disconnect during $reason failed", e)
         }
 
-        try {
-            val flushEnd = System.currentTimeMillis() + 500
-            while (System.currentTimeMillis() < flushEnd) {
-                c.processEvents()
-                Thread.sleep(20)
+        if (disconnectSent) {
+            try {
+                val flushEnd = System.currentTimeMillis() + 500
+                while (System.currentTimeMillis() < flushEnd) {
+                    c.processEvents()
+                    Thread.sleep(20)
+                }
+                Log.d(TAG, "Disconnect flush complete ($reason)")
+            } catch (e: Throwable) {
+                Log.w(TAG, "disconnect flush during $reason failed", e)
             }
-            Log.d(TAG, "Disconnect flush complete ($reason)")
-        } catch (e: Throwable) {
-            Log.w(TAG, "disconnect flush during $reason failed", e)
         }
 
+        destroyClient(c, reason)
+    }
+
+    private fun destroyClient(c: Client, reason: String) {
         try {
             c.close()
         } catch (e: Throwable) {

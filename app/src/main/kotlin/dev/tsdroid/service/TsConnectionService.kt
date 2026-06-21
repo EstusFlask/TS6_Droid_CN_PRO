@@ -133,9 +133,14 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     private var lastSavedY = 300
     
     private var isIntentionalDisconnect = false
+    private var latestStartId = 0
+    @Volatile private var isStopping = false
+    @Volatile private var restartRequestedWhileStopping = false
 
     override fun onCreate() {
         super.onCreate()
+        isStopping = false
+        restartRequestedWhileStopping = false
         instance = this
         Log.d(TAG, "Foreground Service Created")
         savedStateRegistryController.performRestore(null)
@@ -317,7 +322,20 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
             return START_NOT_STICKY
         }
 
+        latestStartId = startId
         startServiceForeground()
+
+        if (isStopping) {
+            if (intent.action != ACTION_DISCONNECT) {
+                Log.d(TAG, "Start requested while service is stopping; will reopen after disconnect completes")
+                restartRequestedWhileStopping = true
+            }
+            return START_NOT_STICKY
+        }
+
+        if (instance == null) {
+            instance = this
+        }
         
         when (intent?.action) {
             ACTION_DISCONNECT -> {
@@ -393,30 +411,32 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
             .build()
     }
 
-    fun connect(address: String, identity: Identity, nickname: String, password: String?) {
+    suspend fun connect(address: String, identity: Identity, nickname: String, password: String?): Throwable? {
+        if (isStopping) {
+            return IllegalStateException("Connection service is still stopping. Please try again.")
+        }
+
+        val stopStartId = latestStartId
         isIntentionalDisconnect = false
-        serviceScope.launch {
-            try {
-                tsClient.connect(address, identity, nickname, password)
-                audioBridge.startCapture(serviceScope)
-                // Sync initial mute state with server
-                if (audioBridge.isMuted.value) {
-                    tsClient.setInputMuted(true)
-                }
-                // Start event loop
-                tsClient.startEventLoop()
-                // Initialize whisper manager
-                WhisperManager.init(tsClient)
-                WhisperBridge.tryLoad()
-            } catch (e: Throwable) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                Log.e(TAG, "Connection error", e)
-                // Don't kill the service on connection failure — just clean up audio
-                // and let the ViewModel observe the DISCONNECTED state to handle UI.
-                // This prevents crash/race when the user retries immediately.
-                audioBridge.stopCapture()
-                WhisperManager.reset()
+        return try {
+            tsClient.connect(address, identity, nickname, password)
+            audioBridge.startCapture(serviceScope)
+            // Sync initial mute state with server
+            if (audioBridge.isMuted.value) {
+                tsClient.setInputMuted(true)
             }
+            // Start event loop
+            tsClient.startEventLoop()
+            // Initialize whisper manager
+            WhisperManager.init(tsClient)
+            WhisperBridge.tryLoad()
+            null
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Log.e(TAG, "Connection error", e)
+            prepareToStop()
+            finishStopOrRestart(stopStartId)
+            e
         }
     }
 
@@ -425,22 +445,45 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     }
 
     private fun disconnectAndStop() {
+        if (isStopping) return
+        val stopStartId = latestStartId
+        prepareToStop()
         isIntentionalDisconnect = true
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                tsClient.disconnect()
+            } finally {
+                withContext(Dispatchers.Main) {
+                    finishStopOrRestart(stopStartId)
+                }
+            }
+        }
+    }
+
+    private fun prepareToStop() {
+        isStopping = true
         if (instance == this) {
             instance = null
         }
         hideFloatingWindow()
         audioBridge.stopCapture()
         WhisperManager.reset()
-        serviceScope.launch(Dispatchers.IO) {
-            try {
-                tsClient.disconnect()
-            } finally {
-                withContext(Dispatchers.Main) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                }
-            }
+    }
+
+    private fun finishStopOrRestart(stopStartId: Int) {
+        if (restartRequestedWhileStopping || latestStartId != stopStartId) {
+            restartRequestedWhileStopping = false
+            isStopping = false
+            instance = this
+            updateNotification()
+            return
+        }
+
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (stopStartId != 0) {
+            stopSelf(stopStartId)
+        } else {
+            stopSelf()
         }
     }
 
