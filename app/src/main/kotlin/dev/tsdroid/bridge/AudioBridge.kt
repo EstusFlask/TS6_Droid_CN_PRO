@@ -29,6 +29,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
 
 class AudioBridge(
     private val context: Context,
@@ -47,6 +48,7 @@ class AudioBridge(
         private const val VOICE_ACTIVITY_RELEASE_MARGIN_DB = 6.0f
         private const val VOICE_ACTIVITY_HOLD_FRAMES = 12 // 240 ms at 20 ms/frame
         private const val VOICE_ACTIVITY_PRE_ROLL_FRAMES = 3 // 60 ms at 20 ms/frame
+        private const val NOISE_SUPPRESSION_SPEECH_HOLD_FRAMES = 8
     }
 
     private val audioConfig = AudioConfig()
@@ -179,6 +181,8 @@ class AudioBridge(
         }
         audioRecord = record
         _isCapturing.value = true
+        noiseFloorDb = DEFAULT_NOISE_FLOOR_DB
+        speechHoldFrames = 0
 
         captureJob = scope.launch(Dispatchers.IO) {
             val buffer = ShortArray(FRAME_SIZE_SAMPLES)
@@ -494,27 +498,29 @@ class AudioBridge(
     }
 
     private fun applyNoiseSuppression(samples: ShortArray, count: Int) {
+        val level = noiseSuppressionLevel.coerceIn(
+            SettingsStore.MIN_NOISE_SUPPRESSION_LEVEL,
+            SettingsStore.MAX_NOISE_SUPPRESSION_LEVEL,
+        )
+        suppressIsolatedImpulses(samples, count, level)
+
         val inputRmsDb = calculateRmsDb(samples, count)
         if (inputRmsDb == Float.NEGATIVE_INFINITY || inputRmsDb.isNaN()) return
 
         updateNoiseFloor(inputRmsDb)
 
-        val level = noiseSuppressionLevel.coerceIn(
-            SettingsStore.MIN_NOISE_SUPPRESSION_LEVEL,
-            SettingsStore.MAX_NOISE_SUPPRESSION_LEVEL,
-        )
         val marginDb = 6.0f + level * 3.0f
         val transitionDb = 5.0f + level
         val minimumGain = when (level) {
-            0 -> 0.65f
-            1 -> 0.45f
-            2 -> 0.30f
-            else -> 0.18f
+            0 -> 0.40f
+            1 -> 0.12f
+            2 -> 0.03f
+            else -> 0.0f
         }
         val speechThresholdDb = noiseFloorDb + marginDb
 
         if (inputRmsDb >= speechThresholdDb + transitionDb) {
-            speechHoldFrames = 8
+            speechHoldFrames = NOISE_SUPPRESSION_SPEECH_HOLD_FRAMES
             return
         }
 
@@ -527,10 +533,43 @@ class AudioBridge(
         val gain = minimumGain + (1.0f - minimumGain) * openness
         if (gain >= 0.99f) return
 
+        val residualGate = when (level) {
+            0 -> 0
+            1 -> 16
+            2 -> 32
+            else -> 48
+        }
         for (i in 0 until count) {
-            samples[i] = (samples[i] * gain).toInt()
+            val value = (samples[i] * gain).toInt()
                 .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                .toShort()
+            samples[i] = if (abs(value) <= residualGate) 0 else value.toShort()
+        }
+    }
+
+    private fun suppressIsolatedImpulses(samples: ShortArray, count: Int, level: Int) {
+        if (count < 3) return
+
+        val impulseThreshold = when (level) {
+            0 -> 256
+            1 -> 128
+            2 -> 96
+            else -> 64
+        }
+
+        for (i in 1 until count - 1) {
+            val previous = samples[i - 1].toInt()
+            val current = samples[i].toInt()
+            val next = samples[i + 1].toInt()
+            val interpolated = (previous + next) / 2
+            val deviation = abs(current - interpolated)
+            val neighborDelta = abs(previous - next)
+
+            if (
+                deviation >= impulseThreshold &&
+                deviation >= neighborDelta * 4 + impulseThreshold / 2
+            ) {
+                samples[i] = interpolated.toShort()
+            }
         }
     }
 
