@@ -11,6 +11,7 @@ import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dev.tsdroid.data.SettingsStore
 import dev.tslib.AudioConfig
 import dev.tslib.OpusCodec
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,7 @@ class AudioBridge(
         private const val FRAME_SIZE_SAMPLES = SAMPLE_RATE * FRAME_SIZE_MS / 1000 // 960
         private const val FRAME_SIZE_BYTES = FRAME_SIZE_SAMPLES * 2 // 16-bit PCM = 2 bytes/sample
         private const val MAX_QUEUE_FRAMES = 10 // Max buffered frames per user
+        private const val LOCAL_VOICE_ACTIVE_THRESHOLD_DB = -46.8f
     }
 
     private val audioConfig = AudioConfig()
@@ -65,6 +67,12 @@ class AudioBridge(
 
     @Volatile
     var gainFactor: Float = 1.0f
+
+    @Volatile
+    var voiceActivityDetectionEnabled: Boolean = false
+
+    @Volatile
+    var voiceActivityThresholdDb: Float = SettingsStore.DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB
 
     @Volatile
     private var mutedUserIds: Set<Int> = emptySet()
@@ -158,14 +166,19 @@ class AudioBridge(
                     break
                 }
                 if (read == FRAME_SIZE_SAMPLES && !_isMuted.value) {
-                    var energy = 0L
-                    for (i in 0 until read) {
-                        energy += buffer[i].toLong() * buffer[i].toLong()
+                    val rmsDb = calculateRmsDb(buffer, read)
+                    val vadEnabled = voiceActivityDetectionEnabled
+                    val isVoiceActive = if (vadEnabled) {
+                        rmsDb >= voiceActivityThresholdDb
+                    } else {
+                        rmsDb >= LOCAL_VOICE_ACTIVE_THRESHOLD_DB
                     }
-                    val rms = Math.sqrt(energy.toDouble() / read)
-                    val isVoiceActive = rms > 150.0 // Adjusted threshold for voice activity
                     _isLocalVoiceActive.value = isVoiceActive
-                    
+
+                    if (vadEnabled && !isVoiceActive) {
+                        continue
+                    }
+
                     val pcmBytes = shortsToBytes(buffer)
                     try {
                         val encoded = codec.encode(pcmBytes)
@@ -354,5 +367,16 @@ class AudioBridge(
             out[i] = ((bytes[i * 2].toInt() and 0xFF) or
                     (bytes[i * 2 + 1].toInt() shl 8)).toShort()
         }
+    }
+
+    private fun calculateRmsDb(samples: ShortArray, count: Int): Float {
+        var energy = 0L
+        for (i in 0 until count) {
+            val sample = samples[i].toLong()
+            energy += sample * sample
+        }
+        val rms = Math.sqrt(energy.toDouble() / count)
+        if (rms <= 0.0) return Float.NEGATIVE_INFINITY
+        return (20.0 * Math.log10(rms / Short.MAX_VALUE)).toFloat()
     }
 }

@@ -158,6 +158,16 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
     val enableFloatingWindow: StateFlow<Boolean> = settingsStore.enableFloatingWindow
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val voiceActivityDetectionEnabled: StateFlow<Boolean> = settingsStore.voiceActivityDetectionEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val voiceActivityThresholdDb: StateFlow<Float> = settingsStore.voiceActivityThresholdDb
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            SettingsStore.DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB,
+        )
+
     // File manager state
     private val _fileManagerOpen = MutableStateFlow(false)
     val fileManagerOpen: StateFlow<Boolean> = _fileManagerOpen.asStateFlow()
@@ -313,6 +323,18 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
             }
             // Apply persisted audio gain
             service.audioBridge.gainFactor = audioGain.value
+            service.audioBridge.voiceActivityDetectionEnabled = voiceActivityDetectionEnabled.value
+            service.audioBridge.voiceActivityThresholdDb = voiceActivityThresholdDb.value
+            viewModelScope.launch {
+                voiceActivityDetectionEnabled.collect {
+                    service.audioBridge.voiceActivityDetectionEnabled = it
+                }
+            }
+            viewModelScope.launch {
+                voiceActivityThresholdDb.collect {
+                    service.audioBridge.voiceActivityThresholdDb = it
+                }
+            }
             // Observe audio state for local talking status
             viewModelScope.launch {
                 service.audioBridge.isLocalVoiceActive.collect { _isLocalTalking.value = it }
@@ -624,6 +646,24 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setEnableFloatingWindow(enabled: Boolean) {
         viewModelScope.launch { settingsStore.setEnableFloatingWindow(enabled) }
+    }
+
+    fun setVoiceActivityDetectionEnabled(enabled: Boolean) {
+        audioBridge?.voiceActivityDetectionEnabled = enabled
+        viewModelScope.launch { settingsStore.setVoiceActivityDetectionEnabled(enabled) }
+    }
+
+    fun setVoiceActivityThresholdDb(thresholdDb: Float) {
+        val value = thresholdDb.coerceIn(
+            SettingsStore.MIN_VOICE_ACTIVITY_THRESHOLD_DB,
+            SettingsStore.MAX_VOICE_ACTIVITY_THRESHOLD_DB,
+        )
+        audioBridge?.voiceActivityThresholdDb = value
+        viewModelScope.launch { settingsStore.setVoiceActivityThresholdDb(value) }
+    }
+
+    fun resetVoiceActivityThresholdDb() {
+        setVoiceActivityThresholdDb(SettingsStore.DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB)
     }
 
     fun toggleVoiceMode() {

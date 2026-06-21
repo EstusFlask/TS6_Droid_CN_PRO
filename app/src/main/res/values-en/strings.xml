@@ -32,6 +32,10 @@
     <string name="settings">Settings</string>
     <string name="audio_gain">Audio gain</string>
     <string name="audio_gain_value">×%1$.1f</string>
+    <string name="voice_activity_detection">Voice activity detection</string>
+    <string name="voice_activity_threshold">Volume threshold</string>
+    <string name="voice_activity_threshold_value">%1$.0f dB</string>
+    <string name="voice_activity_threshold_reset">Reset volume threshold</string>
     <string name="auto_load_images">Auto-load images</string>
     <string name="push_to_talk">Push to talk</string>
     <string name="mute_mic">Mute mic</string>

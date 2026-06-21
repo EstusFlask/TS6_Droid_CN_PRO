@@ -42,6 +42,10 @@
     <string name="settings">设置</string>
     <string name="audio_gain">音量增益</string>
     <string name="audio_gain_value">×%1$.1f</string>
+    <string name="voice_activity_detection">语音活动检测</string>
+    <string name="voice_activity_threshold">音量门限</string>
+    <string name="voice_activity_threshold_value">%1$.0f dB</string>
+    <string name="voice_activity_threshold_reset">还原音量门限</string>
     <string name="show_link_thumbnails">显示视频链接缩略图</string>
     <string name="auto_load_images">自动加载图片</string>
     <string name="enable_floating_window">启用悬浮窗</string>

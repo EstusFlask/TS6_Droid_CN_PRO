@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.AlertDialog
@@ -76,8 +78,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.tsdroid.data.SettingsStore
 import dev.tsdroid.han.R
 import dev.tslib.ConnectionState
 import dev.tslib.User
@@ -91,6 +95,7 @@ import dev.tsdroid.viewmodel.FileAttachment
 import dev.tsdroid.viewmodel.ServerViewModel
 import kotlinx.coroutines.flow.StateFlow
 import dev.tsdroid.service.WhisperManager
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,6 +120,8 @@ fun ServerScreen(
     val showLinkThumbnails by viewModel.showLinkThumbnails.collectAsState()
     val autoLoadImages by viewModel.autoLoadImages.collectAsState()
     val enableFloatingWindow by viewModel.enableFloatingWindow.collectAsState()
+    val voiceActivityDetectionEnabled by viewModel.voiceActivityDetectionEnabled.collectAsState()
+    val voiceActivityThresholdDb by viewModel.voiceActivityThresholdDb.collectAsState()
     val mutedUserIds by viewModel.mutedUserIds.collectAsState()
     val fileManagerOpen by viewModel.fileManagerOpen.collectAsState()
     val fileList by viewModel.fileList.collectAsState()
@@ -192,6 +199,11 @@ fun ServerScreen(
             onAutoLoadImagesChange = { viewModel.setAutoLoadImages(it) },
             enableFloatingWindow = enableFloatingWindow,
             onEnableFloatingWindowChange = { viewModel.setEnableFloatingWindow(it) },
+            voiceActivityDetectionEnabled = voiceActivityDetectionEnabled,
+            onVoiceActivityDetectionEnabledChange = { viewModel.setVoiceActivityDetectionEnabled(it) },
+            voiceActivityThresholdDb = voiceActivityThresholdDb,
+            onVoiceActivityThresholdDbChange = { viewModel.setVoiceActivityThresholdDb(it) },
+            onResetVoiceActivityThresholdDb = { viewModel.resetVoiceActivityThresholdDb() },
             onDismiss = { showSettings = false },
             onNavigateToAbout = onNavigateToAbout
         )
@@ -715,10 +727,21 @@ private fun SettingsDialog(
     onAutoLoadImagesChange: (Boolean) -> Unit,
     enableFloatingWindow: Boolean,
     onEnableFloatingWindowChange: (Boolean) -> Unit,
+    voiceActivityDetectionEnabled: Boolean,
+    onVoiceActivityDetectionEnabledChange: (Boolean) -> Unit,
+    voiceActivityThresholdDb: Float,
+    onVoiceActivityThresholdDbChange: (Float) -> Unit,
+    onResetVoiceActivityThresholdDb: () -> Unit,
     onDismiss: () -> Unit,
     onNavigateToAbout: () -> Unit,
 ) {
     var sliderValue by remember(currentGain) { mutableFloatStateOf(currentGain) }
+    var thresholdValue by remember(voiceActivityThresholdDb) {
+        mutableFloatStateOf(roundVoiceActivityThreshold(voiceActivityThresholdDb))
+    }
+    var thresholdText by remember(voiceActivityThresholdDb) {
+        mutableStateOf(formatVoiceActivityThreshold(voiceActivityThresholdDb))
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -737,6 +760,76 @@ private fun SettingsDialog(
                     valueRange = 1.0f..8.0f,
                     steps = 13, // (8-1)/0.5 - 1 = 13 intermediate steps
                 )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.voice_activity_detection),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = voiceActivityDetectionEnabled,
+                        onCheckedChange = onVoiceActivityDetectionEnabledChange,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "${stringResource(R.string.voice_activity_threshold)} : ${
+                        stringResource(R.string.voice_activity_threshold_value, thresholdValue)
+                    }",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Slider(
+                        value = thresholdValue,
+                        onValueChange = {
+                            thresholdValue = roundVoiceActivityThreshold(it)
+                            thresholdText = formatVoiceActivityThreshold(thresholdValue)
+                        },
+                        onValueChangeFinished = { onVoiceActivityThresholdDbChange(thresholdValue) },
+                        valueRange = SettingsStore.MIN_VOICE_ACTIVITY_THRESHOLD_DB..
+                            SettingsStore.MAX_VOICE_ACTIVITY_THRESHOLD_DB,
+                        steps = 79,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = thresholdText,
+                        onValueChange = { input ->
+                            thresholdText = input
+                            val parsed = input.toFloatOrNull() ?: return@OutlinedTextField
+                            thresholdValue = roundVoiceActivityThreshold(parsed)
+                            onVoiceActivityThresholdDbChange(thresholdValue)
+                        },
+                        modifier = Modifier.width(86.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    Text(
+                        text = "dB",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    IconButton(
+                        onClick = {
+                            val defaultValue = SettingsStore.DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB
+                            thresholdValue = defaultValue
+                            thresholdText = formatVoiceActivityThreshold(defaultValue)
+                            onResetVoiceActivityThresholdDb()
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Restore,
+                            contentDescription = stringResource(R.string.voice_activity_threshold_reset),
+                        )
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -800,4 +893,15 @@ private fun SettingsDialog(
             }
         },
     )
+}
+
+private fun roundVoiceActivityThreshold(value: Float): Float {
+    return value.roundToInt().toFloat().coerceIn(
+        SettingsStore.MIN_VOICE_ACTIVITY_THRESHOLD_DB,
+        SettingsStore.MAX_VOICE_ACTIVITY_THRESHOLD_DB,
+    )
+}
+
+private fun formatVoiceActivityThreshold(value: Float): String {
+    return roundVoiceActivityThreshold(value).roundToInt().toString()
 }
