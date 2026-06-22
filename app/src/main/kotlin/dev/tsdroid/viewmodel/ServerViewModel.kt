@@ -225,6 +225,12 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }.collect { _users.value = it }
         }
+        viewModelScope.launch {
+            settingsStore.isPttMode.collect { isPttMode ->
+                _isPttMode.value = isPttMode
+                audioBridge?.setMuted(isPttMode)
+            }
+        }
         // When current channel changes, query permissions if not already known
         viewModelScope.launch {
             combine(_channels, _rawUsers) { channels, users ->
@@ -271,6 +277,7 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
             tsClient = service.tsClient
             audioBridge = service.audioBridge
             audioBridge?.setMutedUserIds(_mutedUserIds.value)
+            audioBridge?.setMuted(_isPttMode.value)
             connectionService = service
             queriedPermChannels.clear()
 
@@ -707,6 +714,7 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
         _isPttMode.value = newPttMode
         // When switching to PTT mode, mute. When switching to VA, unmute.
         audioBridge?.setMuted(newPttMode)
+        viewModelScope.launch { settingsStore.setIsPttMode(newPttMode) }
     }
 
     fun toggleOutputMute() {

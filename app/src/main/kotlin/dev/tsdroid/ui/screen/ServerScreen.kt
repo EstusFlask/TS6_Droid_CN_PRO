@@ -726,7 +726,7 @@ private fun ChatPanel(
 }
 
 @Composable
-private fun SettingsDialog(
+internal fun SettingsDialog(
     currentGain: Float,
     onGainChange: (Float) -> Unit,
     showLinkThumbnails: Boolean,

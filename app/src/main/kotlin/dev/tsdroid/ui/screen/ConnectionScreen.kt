@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -98,6 +99,7 @@ fun ConnectionScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var deleteConfirmIndex by remember { mutableStateOf<Int?>(null) }
     var showBottomSheet by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
@@ -105,6 +107,18 @@ fun ConnectionScreen(
     val context = LocalContext.current
     val activity = context as? androidx.activity.ComponentActivity
     val settingsStore = remember { SettingsStore(context) }
+    val audioGain by settingsStore.audioGain.collectAsState(initial = 1.0f)
+    val showLinkThumbnails by settingsStore.showLinkThumbnails.collectAsState(initial = false)
+    val autoLoadImages by settingsStore.autoLoadImages.collectAsState(initial = true)
+    val enableFloatingWindow by settingsStore.enableFloatingWindow.collectAsState(initial = false)
+    val voiceActivityDetectionEnabled by settingsStore.voiceActivityDetectionEnabled.collectAsState(initial = false)
+    val voiceActivityThresholdDb by settingsStore.voiceActivityThresholdDb.collectAsState(
+        initial = SettingsStore.DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB,
+    )
+    val noiseSuppressionEnabled by settingsStore.noiseSuppressionEnabled.collectAsState(initial = false)
+    val noiseSuppressionLevel by settingsStore.noiseSuppressionLevel.collectAsState(
+        initial = SettingsStore.DEFAULT_NOISE_SUPPRESSION_LEVEL,
+    )
     val languageOptions = listOf(
         "zh" to stringResource(R.string.language_simplified_chinese),
         "en" to stringResource(R.string.language_english),
@@ -149,6 +163,9 @@ fun ConnectionScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
+                    }
                     Box {
                         TextButton(onClick = { languageMenuExpanded = true }) {
                             Text(selectedLanguage)
@@ -186,6 +203,39 @@ fun ConnectionScreen(
             }
         },
     ) { padding ->
+        if (showSettings) {
+            SettingsDialog(
+                currentGain = audioGain,
+                onGainChange = { scope.launch { settingsStore.setAudioGain(it) } },
+                showLinkThumbnails = showLinkThumbnails,
+                onShowLinkThumbnailsChange = { scope.launch { settingsStore.setShowLinkThumbnails(it) } },
+                autoLoadImages = autoLoadImages,
+                onAutoLoadImagesChange = { scope.launch { settingsStore.setAutoLoadImages(it) } },
+                enableFloatingWindow = enableFloatingWindow,
+                onEnableFloatingWindowChange = { scope.launch { settingsStore.setEnableFloatingWindow(it) } },
+                voiceActivityDetectionEnabled = voiceActivityDetectionEnabled,
+                onVoiceActivityDetectionEnabledChange = {
+                    scope.launch { settingsStore.setVoiceActivityDetectionEnabled(it) }
+                },
+                voiceActivityThresholdDb = voiceActivityThresholdDb,
+                onVoiceActivityThresholdDbChange = {
+                    scope.launch { settingsStore.setVoiceActivityThresholdDb(it) }
+                },
+                onResetVoiceActivityThresholdDb = {
+                    scope.launch {
+                        settingsStore.setVoiceActivityThresholdDb(
+                            SettingsStore.DEFAULT_VOICE_ACTIVITY_THRESHOLD_DB,
+                        )
+                    }
+                },
+                noiseSuppressionEnabled = noiseSuppressionEnabled,
+                onNoiseSuppressionEnabledChange = { scope.launch { settingsStore.setNoiseSuppressionEnabled(it) } },
+                noiseSuppressionLevel = noiseSuppressionLevel,
+                onNoiseSuppressionLevelChange = { scope.launch { settingsStore.setNoiseSuppressionLevel(it) } },
+                onDismiss = { showSettings = false },
+                onNavigateToAbout = onNavigateToAbout,
+            )
+        }
         pendingLanguageTag?.let { languageTag ->
             val languageLabel = languageOptions.firstOrNull { it.first == languageTag }?.second ?: languageTag
             AlertDialog(

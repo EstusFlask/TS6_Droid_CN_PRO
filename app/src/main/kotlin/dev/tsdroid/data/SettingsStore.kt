@@ -21,6 +21,7 @@ private val KEY_VOICE_ACTIVITY_DETECTION_ENABLED = booleanPreferencesKey("voice_
 private val KEY_VOICE_ACTIVITY_THRESHOLD_DB = floatPreferencesKey("voice_activity_threshold_db")
 private val KEY_NOISE_SUPPRESSION_ENABLED = booleanPreferencesKey("noise_suppression_enabled")
 private val KEY_NOISE_SUPPRESSION_LEVEL = intPreferencesKey("noise_suppression_level")
+private val KEY_IS_PTT_MODE = booleanPreferencesKey("is_ptt_mode")
 
 class SettingsStore(private val context: Context) {
     companion object {
@@ -67,6 +68,9 @@ class SettingsStore(private val context: Context) {
                 .coerceIn(MIN_NOISE_SUPPRESSION_LEVEL, MAX_NOISE_SUPPRESSION_LEVEL)
         }
 
+    val isPttMode: Flow<Boolean> = context.settingsDataStore.data
+        .map { it[KEY_IS_PTT_MODE] ?: true }
+
     suspend fun setAudioGain(gain: Float) {
         context.settingsDataStore.edit { it[KEY_AUDIO_GAIN] = gain }
     }
@@ -109,5 +113,9 @@ class SettingsStore(private val context: Context) {
             it[KEY_NOISE_SUPPRESSION_LEVEL] = level
                 .coerceIn(MIN_NOISE_SUPPRESSION_LEVEL, MAX_NOISE_SUPPRESSION_LEVEL)
         }
+    }
+
+    suspend fun setIsPttMode(isPttMode: Boolean) {
+        context.settingsDataStore.edit { it[KEY_IS_PTT_MODE] = isPttMode }
     }
 }
