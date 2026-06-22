@@ -17,6 +17,7 @@ private val KEY_SHOW_LINK_THUMBNAILS = booleanPreferencesKey("show_link_thumbnai
 private val KEY_AUTO_LOAD_IMAGES = booleanPreferencesKey("auto_load_images")
 private val KEY_LANGUAGE = stringPreferencesKey("language")
 private val KEY_ENABLE_FLOATING_WINDOW = booleanPreferencesKey("enable_floating_window")
+private val KEY_PROMPT_UPDATES = booleanPreferencesKey("prompt_updates")
 private val KEY_VOICE_ACTIVITY_DETECTION_ENABLED = booleanPreferencesKey("voice_activity_detection_enabled")
 private val KEY_VOICE_ACTIVITY_THRESHOLD_DB = floatPreferencesKey("voice_activity_threshold_db")
 private val KEY_NOISE_SUPPRESSION_ENABLED = booleanPreferencesKey("noise_suppression_enabled")
@@ -47,6 +48,9 @@ class SettingsStore(private val context: Context) {
 
     val enableFloatingWindow: Flow<Boolean> = context.settingsDataStore.data
         .map { it[KEY_ENABLE_FLOATING_WINDOW] ?: false }
+
+    val promptUpdates: Flow<Boolean> = context.settingsDataStore.data
+        .map { it[KEY_PROMPT_UPDATES] ?: true }
 
     val voiceActivityDetectionEnabled: Flow<Boolean> = context.settingsDataStore.data
         .map { it[KEY_VOICE_ACTIVITY_DETECTION_ENABLED] ?: false }
@@ -89,6 +93,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setEnableFloatingWindow(enabled: Boolean) {
         context.settingsDataStore.edit { it[KEY_ENABLE_FLOATING_WINDOW] = enabled }
+    }
+
+    suspend fun setPromptUpdates(enabled: Boolean) {
+        context.settingsDataStore.edit { it[KEY_PROMPT_UPDATES] = enabled }
     }
 
     suspend fun setVoiceActivityDetectionEnabled(enabled: Boolean) {

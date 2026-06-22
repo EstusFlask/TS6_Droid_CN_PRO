@@ -81,6 +81,11 @@ import kotlinx.coroutines.launch
 fun ConnectionScreen(
     onConnected: () -> Unit,
     onNavigateToAbout: () -> Unit,
+    promptUpdates: Boolean = true,
+    onPromptUpdatesChange: (Boolean) -> Unit = {},
+    appVersionName: String = "",
+    isCheckingForUpdates: Boolean = false,
+    onCheckForUpdates: () -> Unit = {},
     viewModel: ConnectionViewModel = viewModel(),
 ) {
     val address by viewModel.address.collectAsState()
@@ -232,6 +237,11 @@ fun ConnectionScreen(
                 onNoiseSuppressionEnabledChange = { scope.launch { settingsStore.setNoiseSuppressionEnabled(it) } },
                 noiseSuppressionLevel = noiseSuppressionLevel,
                 onNoiseSuppressionLevelChange = { scope.launch { settingsStore.setNoiseSuppressionLevel(it) } },
+                promptUpdates = promptUpdates,
+                onPromptUpdatesChange = onPromptUpdatesChange,
+                appVersionName = appVersionName,
+                isCheckingForUpdates = isCheckingForUpdates,
+                onCheckForUpdates = onCheckForUpdates,
                 onDismiss = { showSettings = false },
                 onNavigateToAbout = onNavigateToAbout,
             )

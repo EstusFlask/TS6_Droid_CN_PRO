@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -104,6 +105,11 @@ import kotlin.math.roundToInt
 fun ServerScreen(
     onDisconnected: () -> Unit,
     onNavigateToAbout: () -> Unit,
+    promptUpdates: Boolean = true,
+    onPromptUpdatesChange: (Boolean) -> Unit = {},
+    appVersionName: String = "",
+    isCheckingForUpdates: Boolean = false,
+    onCheckForUpdates: () -> Unit = {},
     viewModel: ServerViewModel = viewModel(),
 ) {
     val channels by viewModel.channels.collectAsState()
@@ -212,6 +218,11 @@ fun ServerScreen(
             onNoiseSuppressionEnabledChange = { viewModel.setNoiseSuppressionEnabled(it) },
             noiseSuppressionLevel = noiseSuppressionLevel,
             onNoiseSuppressionLevelChange = { viewModel.setNoiseSuppressionLevel(it) },
+            promptUpdates = promptUpdates,
+            onPromptUpdatesChange = onPromptUpdatesChange,
+            appVersionName = appVersionName,
+            isCheckingForUpdates = isCheckingForUpdates,
+            onCheckForUpdates = onCheckForUpdates,
             onDismiss = { showSettings = false },
             onNavigateToAbout = onNavigateToAbout
         )
@@ -744,6 +755,11 @@ internal fun SettingsDialog(
     onNoiseSuppressionEnabledChange: (Boolean) -> Unit,
     noiseSuppressionLevel: Int,
     onNoiseSuppressionLevelChange: (Int) -> Unit,
+    promptUpdates: Boolean,
+    onPromptUpdatesChange: (Boolean) -> Unit,
+    appVersionName: String,
+    isCheckingForUpdates: Boolean,
+    onCheckForUpdates: () -> Unit,
     onDismiss: () -> Unit,
     onNavigateToAbout: () -> Unit,
 ) {
@@ -937,6 +953,47 @@ internal fun SettingsDialog(
                         checked = enableFloatingWindow,
                         onCheckedChange = onEnableFloatingWindowChange,
                     )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.prompt_updates),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = promptUpdates,
+                        onCheckedChange = onPromptUpdatesChange,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "${stringResource(R.string.software_version)} ${appVersionName.toVersionLabel()}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        onClick = onCheckForUpdates,
+                        enabled = !isCheckingForUpdates,
+                    ) {
+                        Text(
+                            stringResource(
+                                if (isCheckingForUpdates) {
+                                    R.string.update_checking
+                                } else {
+                                    R.string.update_check_button
+                                }
+                            )
+                        )
+                    }
                 }
                 Spacer(Modifier.height(16.dp))
                 TextButton(
