@@ -20,6 +20,11 @@ data class UpdateRelease(
     val apkDownloadUrl: String?,
 )
 
+data class DownloadProgress(
+    val downloadedBytes: Long,
+    val totalBytes: Long,
+)
+
 sealed interface UpdateCheckResult {
     data class Available(val release: UpdateRelease) : UpdateCheckResult
     data object UpToDate : UpdateCheckResult
@@ -59,10 +64,20 @@ object AppUpdateManager {
         }
     }
 
-    suspend fun downloadAndInstall(context: Context, release: UpdateRelease) {
+    suspend fun downloadAndInstall(
+        context: Context,
+        release: UpdateRelease,
+        onProgress: (DownloadProgress) -> Unit = {},
+    ) {
         val downloadUrl = release.apkDownloadUrl ?: throw IOException("No APK asset in release")
         val apkFile = withContext(Dispatchers.IO) {
-            downloadApk(context.applicationContext, downloadUrl, release.apkName, release.tagName)
+            downloadApk(
+                context.applicationContext,
+                downloadUrl,
+                release.apkName,
+                release.tagName,
+                onProgress,
+            )
         }
         withContext(Dispatchers.Main) {
             installApk(context, apkFile)
@@ -119,11 +134,12 @@ object AppUpdateManager {
         }
     }
 
-    private fun downloadApk(
+    private suspend fun downloadApk(
         context: Context,
         downloadUrl: String,
         apkName: String?,
         tagName: String,
+        onProgress: (DownloadProgress) -> Unit,
     ): File {
         val safeName = (apkName ?: "TS6_Droid_Pro-$tagName.apk")
             .replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -140,11 +156,33 @@ object AppUpdateManager {
         try {
             val code = connection.responseCode
             if (code !in 200..299) throw IOException("APK download returned $code")
+            val totalBytes = connection.contentLengthLong.takeIf { it > 0L } ?: -1L
+            var downloadedBytes = 0L
+            var lastProgressEmitMs = 0L
+
+            emitDownloadProgress(onProgress, DownloadProgress(downloadedBytes, totalBytes))
             connection.inputStream.use { input ->
                 temp.outputStream().use { output ->
-                    input.copyTo(output)
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val bytesRead = input.read(buffer)
+                        if (bytesRead == -1) break
+
+                        output.write(buffer, 0, bytesRead)
+                        downloadedBytes += bytesRead
+
+                        val now = System.currentTimeMillis()
+                        if (now - lastProgressEmitMs >= 250L) {
+                            emitDownloadProgress(
+                                onProgress,
+                                DownloadProgress(downloadedBytes, totalBytes),
+                            )
+                            lastProgressEmitMs = now
+                        }
+                    }
                 }
             }
+            emitDownloadProgress(onProgress, DownloadProgress(downloadedBytes, totalBytes))
             if (target.exists() && !target.delete()) {
                 throw IOException("Unable to replace old APK")
             }
@@ -155,6 +193,15 @@ object AppUpdateManager {
             return target
         } finally {
             connection.disconnect()
+        }
+    }
+
+    private suspend fun emitDownloadProgress(
+        onProgress: (DownloadProgress) -> Unit,
+        progress: DownloadProgress,
+    ) {
+        withContext(Dispatchers.Main) {
+            onProgress(progress)
         }
     }
 
