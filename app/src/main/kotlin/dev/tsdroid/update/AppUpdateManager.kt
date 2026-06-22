@@ -9,6 +9,8 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -79,6 +81,7 @@ object AppUpdateManager {
                 onProgress,
             )
         }
+        currentCoroutineContext().ensureActive()
         withContext(Dispatchers.Main) {
             installApk(context, apkFile)
         }
@@ -146,6 +149,7 @@ object AppUpdateManager {
         val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
         val target = File(updatesDir, safeName)
         val temp = File(updatesDir, "$safeName.tmp")
+        var completed = false
         val connection = (URL(downloadUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 10_000
@@ -165,6 +169,7 @@ object AppUpdateManager {
                 temp.outputStream().use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     while (true) {
+                        currentCoroutineContext().ensureActive()
                         val bytesRead = input.read(buffer)
                         if (bytesRead == -1) break
 
@@ -182,6 +187,7 @@ object AppUpdateManager {
                     }
                 }
             }
+            currentCoroutineContext().ensureActive()
             emitDownloadProgress(onProgress, DownloadProgress(downloadedBytes, totalBytes))
             if (target.exists() && !target.delete()) {
                 throw IOException("Unable to replace old APK")
@@ -190,9 +196,11 @@ object AppUpdateManager {
                 temp.copyTo(target, overwrite = true)
                 temp.delete()
             }
+            completed = true
             return target
         } finally {
             connection.disconnect()
+            if (!completed) temp.delete()
         }
     }
 

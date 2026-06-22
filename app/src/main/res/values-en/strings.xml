@@ -61,6 +61,7 @@
     <string name="update_downloading_message">Downloading. The installer will open automatically when it finishes.</string>
     <string name="update_download_progress">Downloaded %1$s / %2$s</string>
     <string name="update_download_progress_unknown">Downloaded %1$s</string>
+    <string name="update_cancel_download">Cancel download</string>
     <string name="update_download_failed">Failed to download the update.</string>
     <string name="auto_load_images">Auto-load images</string>
     <string name="push_to_talk">Push to talk</string>

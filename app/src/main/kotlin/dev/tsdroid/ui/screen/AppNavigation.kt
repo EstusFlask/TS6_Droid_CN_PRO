@@ -43,6 +43,8 @@ import dev.tsdroid.update.StartupUpdateCheckGate
 import dev.tsdroid.update.UpdateCheckResult
 import dev.tsdroid.update.UpdateRelease
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -58,6 +60,7 @@ fun AppNavigation() {
     var isCheckingForUpdates by remember { mutableStateOf(false) }
     var isDownloadingUpdate by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableStateOf<DownloadProgress?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
 
     fun startUpdateCheck(manual: Boolean) {
         if (isCheckingForUpdates) return
@@ -84,20 +87,30 @@ fun AppNavigation() {
             AppUpdateManager.openReleasePage(context, release.releasePageUrl)
             return
         }
-        scope.launch {
+        downloadJob?.cancel()
+        downloadJob = scope.launch {
             isDownloadingUpdate = true
             downloadProgress = DownloadProgress(0L, -1L)
             try {
                 AppUpdateManager.downloadAndInstall(context, release) { progress ->
                     downloadProgress = progress
                 }
+            } catch (_: CancellationException) {
             } catch (_: Exception) {
                 updateDialogState = UpdateDialogState.DownloadFailed
             } finally {
                 isDownloadingUpdate = false
                 downloadProgress = null
+                downloadJob = null
             }
         }
+    }
+
+    fun cancelDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        isDownloadingUpdate = false
+        downloadProgress = null
     }
 
     LaunchedEffect(Unit) {
@@ -157,6 +170,7 @@ fun AppNavigation() {
         state = updateDialogState,
         isDownloadingUpdate = isDownloadingUpdate,
         downloadProgress = downloadProgress,
+        onCancelDownload = { cancelDownload() },
         onDownload = { downloadUpdate(it) },
         onOpenReleasePage = { url ->
             AppUpdateManager.openReleasePage(context, url)
@@ -182,6 +196,7 @@ private fun UpdateDialogs(
     state: UpdateDialogState?,
     isDownloadingUpdate: Boolean,
     downloadProgress: DownloadProgress?,
+    onCancelDownload: () -> Unit,
     onDownload: (UpdateRelease) -> Unit,
     onOpenReleasePage: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -231,7 +246,11 @@ private fun UpdateDialogs(
                     )
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(onClick = onCancelDownload) {
+                    Text(stringResource(R.string.update_cancel_download))
+                }
+            },
             shape = RoundedCornerShape(16.dp),
             tonalElevation = 8.dp,
         )

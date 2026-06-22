@@ -74,6 +74,7 @@
     <string name="update_downloading_message">正在下载，完成后会自动打开安装。</string>
     <string name="update_download_progress">已下载 %1$s / %2$s</string>
     <string name="update_download_progress_unknown">已下载 %1$s</string>
+    <string name="update_cancel_download">取消下载</string>
     <string name="update_download_failed">下载更新失败。</string>
     <string name="chat">聊天</string>
     <string name="push_to_talk">按住说话</string>

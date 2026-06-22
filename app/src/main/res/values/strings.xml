@@ -75,6 +75,7 @@
     <string name="update_downloading_message">Téléchargement en cours. L’installation s’ouvrira automatiquement ensuite.</string>
     <string name="update_download_progress">%1$s / %2$s téléchargés</string>
     <string name="update_download_progress_unknown">%1$s téléchargés</string>
+    <string name="update_cancel_download">Annuler le téléchargement</string>
     <string name="update_download_failed">Échec du téléchargement de la mise à jour.</string>
     <string name="chat">Chat</string>
     <string name="push_to_talk">Appuyer pour parler</string>
