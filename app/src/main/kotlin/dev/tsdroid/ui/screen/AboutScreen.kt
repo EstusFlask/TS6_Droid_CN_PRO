@@ -23,7 +23,7 @@ import dev.tsdroid.pro.R
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val repoUrl = "https://github.com/YUAXI/TS6_Droid_CN"
+    val repoUrl = "https://github.com/EstusFlask/TS6_Droid_CN_PRO"
     val scrollState = rememberScrollState()
 
     Column(
